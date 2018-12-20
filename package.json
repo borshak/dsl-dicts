@@ -1,0 +1,26 @@
+{
+  "name": "dsl-dicts",
+  "version": "0.0.1",
+  "description": "DSL Dictionaries support",
+  "main": "src/main.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/borshak/dsl-dicts.git"
+  },
+  "keywords": [
+    "dsl",
+    "dictionary"
+  ],
+  "author": "Alexander Borshak",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/borshak/dsl-dicts/issues"
+  },
+  "homepage": "https://github.com/borshak/dsl-dicts#readme",
+  "devDependencies": {
+    "jest": "^23.6.0"
+  }
+}
