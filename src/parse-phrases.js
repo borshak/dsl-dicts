@@ -3,6 +3,7 @@ const ParseError = require('./ParseError');
 const utils = require('./utils');
 const langs = require('./languages');
 
+
 // Prepeared RegExps
 const transcriptionRegEx = /\[t\](.*)\[\/t\]/;
 const translationRegEx = /\[trn\](.*)\[\/trn\]/;
@@ -12,6 +13,63 @@ const langTargetExampleCleanerRegEx = /^\s?[-|—]\s?/;
 const formatCleanerRegEx = /\[(p|\/p|i|\/i|com|\/com|\'|\/\'|\\'|\/\\')\]/g;
 
 
+// Predicates
+const isLineContainsTranscription = line => transcriptionRegEx.test(line);
+const isLineContainsTranslation = line => translationRegEx.test(line);
+const isLineContainsExample = line => exampleRegEx.test(line);
+
+
+// Extractors
+const extractTranscription = line => {
+  const rawMatch = line.match(transcriptionRegEx);
+  return rawMatch[1];
+};
+
+const extractTranslation = line => {
+  const rawMatch = line.match(translationRegEx);
+  const cleanedTranslation = rawMatch[1].replace(formatCleanerRegEx, '');
+  return cleanedTranslation;
+};
+
+const extractExample = (line, dictLanguages) => {
+  const rawMatch = line.match(exampleRegEx);
+  const rawExample = rawMatch[1];
+  if (langByIdRegEx.test(rawExample)) {
+    const langExampleMatch = rawExample.match(langByIdRegEx);
+    const sourceLang = langs.getLanguageById(langExampleMatch[1]);
+    const targetLang = dictLanguages.getTargetLanguage();
+    const sourceExample = langExampleMatch[2];
+    const targetExample = langExampleMatch[3]
+      .replace(formatCleanerRegEx, '')
+      .replace(langTargetExampleCleanerRegEx, '');
+
+    return {
+      [sourceLang]: sourceExample,
+      [targetLang]: targetExample
+    };
+  } else {
+    return null;
+  }
+};
+
+const packExplanation = (translations, examples) => {
+  let explanation = null;
+
+  if (translations.length) {
+    explanation = explanation || {};
+    explanation.translations = translations;
+  }
+
+  if (examples.length) {
+    explanation = explanation || {};
+    explanation.examples = examples;
+  }
+
+  return explanation;
+};
+
+
+// Entity parser
 function *retrieveEntities(headers, body, dictLanguages) {
   debugger;
   const STATE = {
@@ -26,91 +84,48 @@ function *retrieveEntities(headers, body, dictLanguages) {
   let examples = [];
   let currentState = STATE.INIT;
 
-  // const isEntityBodyEmpty = () => !transcription && !translations.length && !examples.length;
-
   for (const bodyLine of body) {
     debugger;
     // Transcription
-    if (transcriptionRegEx.test(bodyLine)) {
-      const rawMatch = bodyLine.match(transcriptionRegEx);
-      transcription = rawMatch[1];
+    if (isLineContainsTranscription(bodyLine)) {
+      transcription = extractTranscription(bodyLine);
     }
 
     // Translation
-    if (translationRegEx.test(bodyLine)) {
+    if (isLineContainsTranslation(bodyLine)) {
       if (currentState === STATE.EXAMPLE) {
-        let explanation = null;
-        if (translations.length) {
-          explanation = explanation || {};
-          explanation.translations = translations;
-        }
-
-        if (examples.length) {
-          explanation = explanation || {};
-          explanation.examples = examples;
-        }
-
-        if (explanation) {
-          explanations.push(explanation);
-        }
+        const explanation = packExplanation(translations, examples);
+        if (explanation) explanations.push(explanation);
 
         translations = [];
         examples = [];
       }
-      
+
       currentState = STATE.TRANSLATION;
-      const rawMatch = bodyLine.match(translationRegEx);
-      const cleanedTranslation = rawMatch[1].replace(formatCleanerRegEx, '');
-      translations.push(cleanedTranslation);
+      translations.push(extractTranslation(bodyLine));
     }
 
     // Example
-    if (exampleRegEx.test(bodyLine)) {
+    if (isLineContainsExample(bodyLine)) {
       currentState = STATE.EXAMPLE;
-      const rawMatch = bodyLine.match(exampleRegEx);
-      const rawExample = rawMatch[1];
-      if (langByIdRegEx.test(rawExample)) {
-        const langExampleMatch = rawExample.match(langByIdRegEx);
-        const sourceLang = langs.getLanguageById(langExampleMatch[1]);
-        const targetLang = dictLanguages.getTargetLanguage();
-        const sourceExample = langExampleMatch[2];
-        const targetExample = langExampleMatch[3]
-          .replace(formatCleanerRegEx, '')
-          .replace(langTargetExampleCleanerRegEx, '');
-        
-          examples.push({
-          [sourceLang]: sourceExample,
-          [targetLang]: targetExample
-        });
-      }
+      const example = extractExample(bodyLine, dictLanguages);
+      if (example) examples.push(example);
     }
-  }
-
-  // If we still in INIT state...
+  } // end of for
+  
   if (currentState === STATE.INIT) {
-    const explanation = {
-      translations: []
-    };
+    // If we still in INIT state...
     for (const bodyLine of body) {
-      explanation.translations.push(bodyLine);
+      translations.push(bodyLine);
     }
 
-    explanations.push(explanation);
+    explanations.push({
+      translations
+    });
   } else if (translations.length || examples.length) {
-    let explanation = null;
-    if (translations.length) {
-      explanation = explanation || {};
-      explanation.translations = translations;
-    }
-
-    if (examples.length) {
-      explanation = explanation || {};
-      explanation.examples = examples;
-    }
-
-    if (explanation) {
-      explanations.push(explanation);
-    }
+    // ...otherwise if some translation/example left unstored
+    const explanation = packExplanation(translations, examples);
+    if (explanation) explanations.push(explanation);
   }
 
   // Construct language entity
@@ -118,10 +133,10 @@ function *retrieveEntities(headers, body, dictLanguages) {
     explanations
   };
 
+  // Add transcription - if we have one
   if (transcription) langEntity.transcription = transcription;
-  // if (examples.length) langEntity.examples = examples;
 
-  // Yield result
+  // Yield result - separate one for each card header
   for (const header of headers) {
     langEntity.phrase = header;
     yield langEntity;
