@@ -2,6 +2,7 @@
 const ParseError = require('./ParseError');
 const parseMeta = require('./parse-meta');
 const parsePhrases = require('./parse-phrases');
+const langs = require('./languages');
 
 // Entry point
 const parse = dslContent => {
@@ -10,9 +11,12 @@ const parse = dslContent => {
       reject(new ParseError());
     }
 
+    const dictionaryMeta = parseMeta(dslContent);
+    const dictLanguages = new langs.DictLanguages(dictionaryMeta);
+
     resolve({
-      meta: parseMeta(dslContent),
-      phrase: parsePhrases(dslContent)
+      meta: dictionaryMeta,
+      phrase: parsePhrases(dslContent, dictLanguages)
     });
   });
 };

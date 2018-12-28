@@ -1,7 +1,7 @@
 const fs = require('fs');
 const dslDicts = require('./src/main');
 
-fs.readFile('./__tests__/__fixtures__/simplest.dsl', 'utf-8', (error, content) => {
+fs.readFile('./__tests__/__fixtures__/basic_en-ru.dsl', 'utf-8', (error, content) => {
   if (error) {
     console.log('ERROR:', error);
     return;

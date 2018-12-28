@@ -3,7 +3,7 @@ const dslDicts = require('../src/main');
 
 const dslContent = fs.readFileSync('./__tests__/__fixtures__/simplest.dsl', 'utf-8');
 
-describe('First test', () => {
+describe('Test of interface on simplest DSL', () => {
     it('DLS parsing test', async () => {
         const dict = await dslDicts.parse(dslContent);
         
@@ -11,14 +11,7 @@ describe('First test', () => {
         expect(dict.meta.language.source).toEqual('English');
         expect(dict.meta.language.target).toEqual('Russian');
 
-        expect(dict.phrase.next()).toEqual({
-            done: false,
-            value: [ 'The simples DSL dictionary', '    Простейший DSL-словарь' ]
-        });
-
-        expect(dict.phrase.next()).toEqual({
-            done: false,
-            value: [ 'i', '    я' ]
-        });
+        expect(dict.phrase.next().done).toEqual(false);
+        expect(dict.phrase.next().done).toEqual(false);
     });    
 });
