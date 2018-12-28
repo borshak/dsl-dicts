@@ -62,7 +62,7 @@ const phrase = {
         [
           {
             English: "Failures of the automatics may be more dangerous than the human failures they are designed to prevent.",
-            Russian:"Ошибки автоматов могут быть более опасными, чем человеческие ошибки, которые эти устройства должны предотвращать."
+            Russian: "Ошибки автоматов могут быть более опасными, чем человеческие ошибки, которые эти устройства должны предотвращать."
           }
         ]
       },
@@ -80,7 +80,7 @@ const phrase = {
 ### Limitations
 
 #### Card header
-As for now headers handles "as is", without supporting ```{}```, ```()``` or any other [meta]symbols. I.e. the header ```walk(ing)``` will be handled just as ```walk(ing)```, but not as [```walk```, ```walking```].
+As for now headers handles "as is", without supporting ```{}```, ```()``` or any other [meta]symbols. I.e. the header ```'walk(ing)'``` will be handled just as ```'walk(ing)'```, but not as ```['walk', 'walking']```.
 
 #### Card body
 As for now only transcription, translation(s) and example(s) supported. References and other advanced features of the DSL format not supported yet.
