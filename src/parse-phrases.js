@@ -13,13 +13,23 @@ const formatCleanerRegEx = /\[(p|\/p|i|\/i|com|\/com|\'|\/\'|\\'|\/\\')\]/g;
 
 
 function *retrieveEntities(headers, body, dictLanguages) {
+  debugger;
+  const STATE = {
+    INIT: 'INIT',
+    TRANSLATION: 'TRANSLATION',
+    EXAMPLE: 'EXAMPLE'
+  };
+
   let transcription = null;
+  let explanations = [];
   let translations = [];
   let examples = [];
+  let currentState = STATE.INIT;
 
-  const isEntityBodyEmpty = () => !transcription && !translations.length && !examples.length;
+  // const isEntityBodyEmpty = () => !transcription && !translations.length && !examples.length;
 
   for (const bodyLine of body) {
+    debugger;
     // Transcription
     if (transcriptionRegEx.test(bodyLine)) {
       const rawMatch = bodyLine.match(transcriptionRegEx);
@@ -28,6 +38,27 @@ function *retrieveEntities(headers, body, dictLanguages) {
 
     // Translation
     if (translationRegEx.test(bodyLine)) {
+      if (currentState === STATE.EXAMPLE) {
+        let explanation = null;
+        if (translations.length) {
+          explanation = explanation || {};
+          explanation.translations = translations;
+        }
+
+        if (examples.length) {
+          explanation = explanation || {};
+          explanation.examples = examples;
+        }
+
+        if (explanation) {
+          explanations.push(explanation);
+        }
+
+        translations = [];
+        examples = [];
+      }
+      
+      currentState = STATE.TRANSLATION;
       const rawMatch = bodyLine.match(translationRegEx);
       const cleanedTranslation = rawMatch[1].replace(formatCleanerRegEx, '');
       translations.push(cleanedTranslation);
@@ -35,6 +66,7 @@ function *retrieveEntities(headers, body, dictLanguages) {
 
     // Example
     if (exampleRegEx.test(bodyLine)) {
+      currentState = STATE.EXAMPLE;
       const rawMatch = bodyLine.match(exampleRegEx);
       const rawExample = rawMatch[1];
       if (langByIdRegEx.test(rawExample)) {
@@ -54,19 +86,40 @@ function *retrieveEntities(headers, body, dictLanguages) {
     }
   }
 
-  if (isEntityBodyEmpty()) {
+  // If we still in INIT state...
+  if (currentState === STATE.INIT) {
+    const explanation = {
+      translations: []
+    };
     for (const bodyLine of body) {
-      translations.push(bodyLine);
+      explanation.translations.push(bodyLine);
+    }
+
+    explanations.push(explanation);
+  } else if (translations.length || examples.length) {
+    let explanation = null;
+    if (translations.length) {
+      explanation = explanation || {};
+      explanation.translations = translations;
+    }
+
+    if (examples.length) {
+      explanation = explanation || {};
+      explanation.examples = examples;
+    }
+
+    if (explanation) {
+      explanations.push(explanation);
     }
   }
 
   // Construct language entity
   const langEntity = {
-    translations
+    explanations
   };
 
   if (transcription) langEntity.transcription = transcription;
-  if (examples.length) langEntity.examples = examples;
+  // if (examples.length) langEntity.examples = examples;
 
   // Yield result
   for (const header of headers) {

@@ -11,7 +11,15 @@ describe('Test of interface on simplest DSL', () => {
         expect(dict.meta.language.source).toEqual('English');
         expect(dict.meta.language.target).toEqual('Russian');
 
+        // Simplest DSL contains 8
         expect(dict.phrase.next().done).toEqual(false);
         expect(dict.phrase.next().done).toEqual(false);
+        expect(dict.phrase.next().done).toEqual(false);
+        expect(dict.phrase.next().done).toEqual(false);
+        expect(dict.phrase.next().done).toEqual(false);
+        expect(dict.phrase.next().done).toEqual(false);
+        expect(dict.phrase.next().done).toEqual(false);
+        expect(dict.phrase.next().done).toEqual(false);
+        expect(dict.phrase.next().done).toEqual(true);
     });    
 });

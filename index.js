@@ -14,6 +14,9 @@ fs.readFile('./__tests__/__fixtures__/basic_en-ru.dsl', 'utf-8', (error, content
       console.log(dict.meta);
 
       for (const phrase of dict.phrase) {
+        console.log();
+        console.log(JSON.stringify(phrase));
+        console.log();
         console.log(phrase);
       }
     } catch(error) {
