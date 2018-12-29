@@ -18,7 +18,8 @@ const parseMeta = dslContent => {
 
   const rawMeta = dslContent.substring(0, startIndexOfFirstEntity);
   const splittedMeta = utils.splitByEndOfLine(rawMeta);
-  const filteredMeta = splittedMeta.filter(str => !utils.isEmptyStr(str));
+  const trimmedMeta = splittedMeta.map(str => str.trim());
+  const filteredMeta = trimmedMeta.filter(str => !utils.isEmptyStr(str));
 
   const meta = {
     name: null,
