@@ -71,7 +71,6 @@ const packExplanation = (translations, examples) => {
 
 // Entity parser
 function *retrieveEntities(headers, body, dictLanguages) {
-  debugger;
   const STATE = {
     INIT: 'INIT',
     TRANSLATION: 'TRANSLATION',
@@ -85,7 +84,6 @@ function *retrieveEntities(headers, body, dictLanguages) {
   let currentState = STATE.INIT;
 
   for (const bodyLine of body) {
-    debugger;
     // Transcription
     if (isLineContainsTranscription(bodyLine)) {
       transcription = extractTranscription(bodyLine);
