@@ -68,6 +68,8 @@ const packExplanation = (translations, examples) => {
   return explanation;
 };
 
+const cleanHeader = header => header.trim();
+
 
 // Entity parser
 function *retrieveEntities(headers, body, dictLanguages) {
@@ -136,7 +138,8 @@ function *retrieveEntities(headers, body, dictLanguages) {
 
   // Yield result - separate one for each card header
   for (const header of headers) {
-    langEntity.phrase = header;
+    const cleanedHeader = cleanHeader(header);
+    langEntity.phrase = cleanedHeader;
     yield langEntity;
   }
 };
