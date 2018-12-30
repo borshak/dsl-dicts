@@ -5,7 +5,7 @@ const langs = require('./languages');
 
 
 // Prepeared RegExps
-const transcriptionRegEx = /\[t\](.*)\[\/t\]/;
+const transcriptionRegEx = /\[t\](.*?)\[\/t\]/;
 const translationRegEx = /\[trn\](.*)\[\/trn\]/;
 const exampleRegEx = /\[ex\](.*)\[\/ex\]/;
 const langByIdRegEx = /\[lang id=(\d{1,5})\](.*)\[\/lang\](.*)/;

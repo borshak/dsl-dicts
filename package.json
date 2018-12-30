@@ -1,6 +1,6 @@
 {
   "name": "dsl-dicts",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "DSL Dictionaries support",
   "main": "src/main.js",
   "scripts": {
