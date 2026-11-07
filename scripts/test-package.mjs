@@ -52,7 +52,12 @@ const entries = [
   ['dsl-dicts', 'setupPlugin', null],
   ['dsl-dicts', 'toPlainText', null],
   ['dsl-dicts', 'zoneText', null],
+  ['dsl-dicts', 'parseAbbreviations', null],
+  ['dsl-dicts', 'parseAnnotation', null],
+  ['dsl-dicts', 'normalizeLabel', null],
   ['dsl-dicts/node', 'describeRuntime', null],
+  ['dsl-dicts/node', 'openDsl', null],
+  ['dsl-dicts/node', 'findDictionaries', null],
   ['dsl-dicts/article', 'MODULE', 'article'],
   ['dsl-dicts/plugins', 'plainText', null],
   ['dsl-dicts/plugins', 'searchText', null],
@@ -79,10 +84,50 @@ assert.deepEqual(results, [
   { headwords: ['color', 'colour'], text: 'hue' },
 ]);
 console.log('ok plugins', plainText.name + '@' + plainText.version, searchText.name + '@' + searchText.version);
+
+// Companion parsers of the core, on text.
+const { parseAbbreviations, parseAnnotation, normalizeLabel } = await load('dsl-dicts');
+const abbreviations = await parseAbbreviations('#NAME "a"\\nadj.\\n\\tadjective\\n');
+assert.deepEqual([...abbreviations], [['adj.', 'adjective']]);
+const annotation = await parseAnnotation('#LANGUAGE "English"\\nHello\\n');
+assert.equal(annotation.text, 'Hello');
+assert.equal(annotation.sections[0].language.iso639_1, 'en');
+assert.equal(normalizeLabel('  a \\t b '), 'a b');
+console.log('ok companion parsers');
+
+// The Node adapter, end to end: a gzipped dictionary with its companion files in a temp directory.
+const { openDsl, findDictionaries } = await load('dsl-dicts/node');
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dsl-dicts-open-'));
+try {
+  const header = '#NAME "a"\\n#INDEX_LANGUAGE "English"\\n#CONTENTS_LANGUAGE "English"\\n';
+  const utf16 = (value) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(value, 'utf16le')]);
+  fs.writeFileSync(path.join(directory, 'syn.dsl.dz'), zlib.gzipSync(Buffer.from(text + 'cat\\n\\t[m1][p]n[/p] [trn]cat[/trn]\\n')));
+  fs.writeFileSync(path.join(directory, 'syn_ABRV.DSL'), utf16(header + 'n\\n\\tnoun\\n'));
+  fs.writeFileSync(path.join(directory, 'syn.ann'), utf16('#LANGUAGE "English"\\nSynthetic.\\n'));
+  fs.writeFileSync(path.join(directory, 'syn.bmp'), Buffer.from('BM'));
+  fs.writeFileSync(path.join(directory, 'syn_abrv.dsl.dz'), Buffer.alloc(0));
+  assert.deepEqual(await findDictionaries(directory), [path.join(directory, 'syn.dsl.dz')]);
+  const dict = await openDsl(path.join(directory, 'syn.dsl.dz'));
+  assert.deepEqual(Object.keys(dict.files), ['dictionary', 'abbreviations', 'annotation', 'icon']);
+  assert.equal(path.basename(dict.files.abbreviations), 'syn_ABRV.DSL');
+  assert.equal((await dict.info).compression, 'gzip');
+  const out = [];
+  for await (const entry of dict.entries({ plugin: plainText, options: { expandLabels: true } })) out.push(entry);
+  assert.deepEqual(out.at(-1), { headwords: ['cat'], text: 'noun cat' });
+  assert.equal(dict.annotation.text, 'Synthetic.');
+  assert.deepEqual(dict.diagnostics, []);
+  console.log('ok openDsl', out.length, 'entries');
+} finally {
+  fs.rmSync(directory, { recursive: true, force: true });
+}
 `;
 
 // CommonJS has no top-level await: wrap the shared body in an async function.
 const cjsCheck = `const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const zlib = require('node:zlib');
 const load = async (specifier) => require(specifier);
 (async () => {${checkBody}})().catch((error) => {
   console.error(error);
@@ -90,6 +135,10 @@ const load = async (specifier) => require(specifier);
 });
 `;
 const esmCheck = `import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import zlib from 'node:zlib';
 const load = (specifier) => import(specifier);
 ${checkBody}`;
 

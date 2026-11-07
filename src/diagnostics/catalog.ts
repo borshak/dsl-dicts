@@ -11,6 +11,9 @@
  * - `DSL5xxx`: plugins. `DSL50xx` are failures of a plugin, always thrown as a `DslError` that
  *   names the plugin; `DSL51xx` are diagnostics that plugins report through
  *   `DictionaryContext.diagnostics`.
+ * - `DSL6xxx`: companion files. `DSL60xx` are problems with the content of an abbreviations
+ *   file (`parseAbbreviations`); `DSL61xx` are problems with finding or reading the files
+ *   next to a dictionary (`dsl-dicts/node`).
  *
  * Codes are stable: once released, a code keeps its meaning and is never reused.
  *
@@ -395,6 +398,31 @@ export const DIAGNOSTICS = {
     summary:
       'A plugin reports a problem with an entry or the dictionary; the message names the ' +
       'plugin, and the plugin may set any severity.',
+  },
+
+  duplicateAbbreviation: {
+    code: 'DSL6001',
+    severity: 'warning',
+    summary:
+      'An abbreviation is defined more than once in the abbreviations file; the first ' +
+      'definition is used.',
+  },
+  emptyAbbreviation: {
+    code: 'DSL6002',
+    severity: 'warning',
+    summary: 'An abbreviation has no expansion (its body has no text); it is skipped.',
+  },
+  companionUnreadable: {
+    code: 'DSL6101',
+    severity: 'warning',
+    summary:
+      'A companion file of the dictionary (abbreviations, annotation) or its directory could ' +
+      'not be read or decoded; it is ignored and the original error is the cause.',
+  },
+  companionMissing: {
+    code: 'DSL6102',
+    severity: 'warning',
+    summary: 'A companion file named explicitly in the options does not exist; it is ignored.',
   },
 } as const satisfies Record<string, DiagnosticSpec>;
 

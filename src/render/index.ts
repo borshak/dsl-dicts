@@ -6,6 +6,7 @@
 
 export {
   hasZones,
+  normalizeLabel,
   type PlainTextOptions,
   SEARCH_ZONES,
   toPlainText,

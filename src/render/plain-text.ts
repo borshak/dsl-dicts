@@ -40,8 +40,10 @@ export interface PlainTextOptions {
   /** Include `[p]` labels. Default `true` in {@link toPlainText}, `false` in {@link zoneText}. */
   readonly labels?: boolean;
   /**
-   * Expansions of `[p]` labels, such as `DictionaryContext.abbreviations`: a label whose text
-   * is a key is replaced by its value. Labels not in the map are kept as written.
+   * Expansions of `[p]` labels, such as `DictionaryContext.abbreviations`: a label whose
+   * text, normalized with {@link normalizeLabel}, is a key is replaced by its value. Labels
+   * not in the map are kept as written. Keys must be normalized too, as those of
+   * `parseAbbreviations` are.
    */
   readonly abbreviations?: ReadonlyMap<string, string>;
   /**
@@ -49,6 +51,27 @@ export interface PlainTextOptions {
    * Default `true`.
    */
   readonly subentries?: boolean;
+}
+
+/**
+ * Normalizes the text of a label, so that `[p]` labels and the headwords of `_abrv.dsl` can be
+ * compared: every run of whitespace (Unicode `\s`, a non-breaking space included) becomes one
+ * space, and leading and trailing whitespace is removed. Case is kept.
+ *
+ * This is the rule behind the keys of `parseAbbreviations` and the `abbreviations` lookup of
+ * {@link toPlainText}.
+ *
+ * @example
+ * ```ts
+ * normalizeLabel('  adj.\u00a0 comp.\t'); // 'adj. comp.'
+ * ```
+ *
+ * @throws DslError `DSL0001` if `text` is not a string.
+ * @experimental
+ */
+export function normalizeLabel(text: string): string {
+  if (typeof text !== 'string') throw DslError.of('invalidArgument', 'The label must be a string.');
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -307,7 +330,7 @@ function renderTag(node: TagNode, out: Writer, s: Settings): void {
       return;
     case 'p': {
       if (!s.labels) return;
-      const expansion = s.abbreviations?.get(collapse(labelText(node.children, s)));
+      const expansion = s.abbreviations?.get(normalizeLabel(labelText(node.children, s)));
       if (typeof expansion === 'string') out.text(expansion);
       else render(node.children, out, s);
       return;

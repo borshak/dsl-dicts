@@ -23,7 +23,7 @@ export default defineConfig({
         test: {
           name: 'browser',
           include: [
-            'test/{core,data,decode,diagnostics,headword,markup,parse,plugin,plugins,segment}/**/*.test.ts',
+            'test/{companion,core,data,decode,diagnostics,headword,markup,parse,plugin,plugins,segment}/**/*.test.ts',
           ],
           browser: {
             enabled: true,

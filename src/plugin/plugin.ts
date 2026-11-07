@@ -8,6 +8,7 @@
  * @packageDocumentation
  */
 
+import type { Annotation } from '../companion/annotation.js';
 import {
   createDiagnostic,
   DIAGNOSTICS,
@@ -49,12 +50,18 @@ export interface DictionaryContext {
    */
   readonly diagnostics: DiagnosticSink;
   /**
-   * Abbreviations for `[p]` labels, from the dictionary's `_abrv.dsl`: label as written ->
-   * its expansion. Absent if there is no such file or nobody read it.
+   * Abbreviations for `[p]` labels, from the dictionary's `_abrv.dsl`: label -> its
+   * expansion. Keys are normalized with `normalizeLabel`, as `parseAbbreviations` makes them,
+   * and `toPlainText` looks labels up the same way. Absent if there is no such file or nobody
+   * read it.
    */
   readonly abbreviations?: ReadonlyMap<string, string>;
-  /** The dictionary's annotation, from its `.ann` file, as text. Absent if not read. */
-  readonly annotation?: string;
+  /**
+   * The dictionary's annotation, from its `.ann` file: an object with its language sections
+   * and the text of the first one (see `Annotation`), not a bare string, so that plugins can
+   * choose a language without parsing the file again. Absent if not read.
+   */
+  readonly annotation?: Annotation;
 }
 
 /**
@@ -133,8 +140,13 @@ export interface DictionaryContextInit {
   readonly header?: DslHeader;
   /** Where plugins report problems; default: a sink that drops them. */
   readonly diagnostics?: DiagnosticSink;
+  /** Expansions of `[p]` labels, such as the result of `parseAbbreviations`. */
   readonly abbreviations?: ReadonlyMap<string, string>;
-  readonly annotation?: string;
+  /**
+   * The annotation: the result of `parseAnnotation`, or a string, which becomes one section
+   * without a language.
+   */
+  readonly annotation?: Annotation | string;
 }
 
 const EMPTY_HEADER: DslHeader = Object.freeze({ directives: Object.freeze([]) });
@@ -172,9 +184,7 @@ export function createDictionaryContext(init: DictionaryContextInit = {}): Dicti
   ) {
     throw DslError.of('invalidArgument', 'The abbreviations must be a Map.');
   }
-  if (annotation !== undefined && typeof annotation !== 'string') {
-    throw DslError.of('invalidArgument', 'The annotation must be a string.');
-  }
+  const resolved = annotation === undefined ? undefined : toAnnotation(annotation);
   const context: { -readonly [K in keyof DictionaryContext]: DictionaryContext[K] } = {
     header,
     astVersion: AST_VERSION,
@@ -182,8 +192,26 @@ export function createDictionaryContext(init: DictionaryContextInit = {}): Dicti
     diagnostics,
   };
   if (abbreviations !== undefined) context.abbreviations = abbreviations;
-  if (annotation !== undefined) context.annotation = annotation;
+  if (resolved !== undefined) context.annotation = resolved;
   return Object.freeze(context);
+}
+
+/** Checks an annotation; a string becomes a single section without a language. */
+function toAnnotation(annotation: unknown): Annotation {
+  if (typeof annotation === 'string') {
+    return { sections: annotation.length === 0 ? [] : [{ text: annotation }], text: annotation };
+  }
+  const { sections, text } = (annotation ?? {}) as Partial<Annotation>;
+  if (
+    typeof annotation !== 'object' ||
+    annotation === null ||
+    typeof text !== 'string' ||
+    !Array.isArray(sections) ||
+    sections.some((section) => typeof section?.text !== 'string')
+  ) {
+    throw DslError.of('invalidArgument', 'The annotation must be a string or an Annotation.');
+  }
+  return annotation as Annotation;
 }
 
 /** Semantic Versioning 2.0.0. */

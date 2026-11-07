@@ -7,6 +7,14 @@
  */
 
 export {
+  type Annotation,
+  type AnnotationSection,
+  type ParseAbbreviationsOptions,
+  type ParseAnnotationOptions,
+  parseAbbreviations,
+  parseAnnotation,
+} from './companion/index.js';
+export {
   findLanguageById,
   findLanguageByName,
   type LanguageInfo,
@@ -94,6 +102,7 @@ export {
 } from './plugin/index.js';
 export {
   hasZones,
+  normalizeLabel,
   type PlainTextOptions,
   SEARCH_ZONES,
   toPlainText,

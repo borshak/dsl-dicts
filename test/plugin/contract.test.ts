@@ -106,7 +106,7 @@ describe('parseDsl with a plugin', () => {
       astVersion: AST_VERSION,
       packageVersion: VERSION,
       abbreviations,
-      annotation: 'About',
+      annotation: { sections: [{ text: 'About' }], text: 'About' },
     });
     expect(context.header.contentsLanguageInfo?.iso639_1).toBe('ru');
     expect(Object.isFrozen(context)).toBe(true);

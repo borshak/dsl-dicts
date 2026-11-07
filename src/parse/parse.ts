@@ -5,6 +5,7 @@
  * @packageDocumentation
  */
 
+import type { Annotation } from '../companion/annotation.js';
 import type { DecodeInfo, DecodeOptions } from '../decode/decode.js';
 import type { DslSource } from '../decode/source.js';
 import {
@@ -59,12 +60,16 @@ export interface ParseDslOptions extends DecodeOptions {
   /** Parse bodies (`ast`, the default) or keep the raw body lines (`raw`). */
   readonly body?: BodyMode;
   /**
-   * Abbreviations for `[p]` labels (from `_abrv.dsl`), passed to plugins as
-   * `DictionaryContext.abbreviations`. Not used by the parser itself.
+   * Abbreviations for `[p]` labels (from `_abrv.dsl`; see `parseAbbreviations`), passed to
+   * plugins as `DictionaryContext.abbreviations`. Not used by the parser itself.
    */
   readonly abbreviations?: ReadonlyMap<string, string>;
-  /** The annotation (from the `.ann` file), passed to plugins as `DictionaryContext.annotation`. */
-  readonly annotation?: string;
+  /**
+   * The annotation (from the `.ann` file; see `parseAnnotation`), passed to plugins as
+   * `DictionaryContext.annotation`. A string is taken as an annotation of one section
+   * without a language.
+   */
+  readonly annotation?: Annotation | string;
 }
 
 /**
@@ -221,7 +226,7 @@ class ParsedDslImpl implements ParsedDsl<AnyEntry> {
   readonly #positions: boolean;
   readonly #raw: boolean;
   readonly #abbreviations: ReadonlyMap<string, string> | undefined;
-  readonly #annotation: string | undefined;
+  readonly #annotation: Annotation | undefined;
 
   constructor(source: DslSource, options: ParseDslOptions) {
     if (typeof options !== 'object' || options === null) {
