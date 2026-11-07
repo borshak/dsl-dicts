@@ -36,6 +36,28 @@ export {
   type SourcePosition,
 } from './diagnostics/index.js';
 export {
+  AST_VERSION,
+  type DeepReadonly,
+  isParentNode,
+  type LineBreakNode,
+  type LinkNode,
+  type MarkupNode,
+  type MarkupOptions,
+  type NodeLocation,
+  type ParentNode,
+  type ParseMarkupOptions,
+  parseBody,
+  parseMarkup,
+  type SubentryNode,
+  type TagAttributes,
+  type TagNode,
+  type TextNode,
+  type TildeNode,
+  type Visitor,
+  type WalkResult,
+  walk,
+} from './markup/index.js';
+export {
   type BodyLine,
   type BodyLineKind,
   createSegmenter,

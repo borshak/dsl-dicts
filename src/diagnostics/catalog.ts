@@ -190,6 +190,116 @@ export const DIAGNOSTICS = {
     severity: 'warning',
     summary: 'A lone @ closes no open sub-entry.',
   },
+
+  unterminatedTag: {
+    code: 'DSL4001',
+    severity: 'warning',
+    summary: 'A [ has no closing ] on its line, or another [ comes first; it is kept as text.',
+  },
+  malformedTag: {
+    code: 'DSL4002',
+    severity: 'warning',
+    summary:
+      'A tag has no name, does not start right after the bracket, or has a backslash in its ' +
+      'name ([], [/], [ b]); it is kept as text.',
+  },
+  danglingEscape: {
+    code: 'DSL4003',
+    severity: 'info',
+    summary: 'A backslash at the end of a line escapes nothing; it is kept as text.',
+  },
+  strayCaret: {
+    code: 'DSL4004',
+    severity: 'info',
+    summary:
+      'A ^ is not followed by a character or ~ whose case it could change; it is kept as text.',
+  },
+  unclosedLink: {
+    code: 'DSL4005',
+    severity: 'warning',
+    summary: 'A << is not closed by >> on its line; it is kept as text.',
+  },
+  emptyLink: {
+    code: 'DSL4006',
+    severity: 'warning',
+    summary: 'A <<>> link has no target; it is kept as text.',
+  },
+  unknownTag: {
+    code: 'DSL4101',
+    severity: 'warning',
+    summary:
+      'A tag name is not in the registry (names are lowercase); it is kept as a tag because a ' +
+      'matching closing tag follows.',
+  },
+  unknownTagAsText: {
+    code: 'DSL4102',
+    severity: 'info',
+    summary:
+      'An unknown tag name without a matching closing tag, or an unknown closing tag without an ' +
+      'opening one, is kept as text.',
+  },
+  unexpectedAttributes: {
+    code: 'DSL4103',
+    severity: 'warning',
+    summary: 'A tag that takes no attributes, or a closing tag, has attributes; they are ignored.',
+  },
+  invalidAttribute: {
+    code: 'DSL4104',
+    severity: 'warning',
+    summary: 'An attribute is malformed, repeated or not valid for its tag; it is ignored.',
+  },
+  missingAttribute: {
+    code: 'DSL4105',
+    severity: 'warning',
+    summary: 'A mandatory attribute is missing: [lang] needs id or name.',
+  },
+  unknownAttributeValue: {
+    code: 'DSL4106',
+    severity: 'warning',
+    summary:
+      'An attribute value is unknown (a color name, language id or language name); it is kept.',
+  },
+  strayClosingTag: {
+    code: 'DSL4201',
+    severity: 'warning',
+    summary: 'A closing tag matches no open tag of the entry or sub-entry; it is ignored.',
+  },
+  unclosedTag: {
+    code: 'DSL4202',
+    severity: 'warning',
+    summary:
+      'A tag other than [m] is still open at the end of its entry, sub-entry or text; it is ' +
+      'closed there.',
+  },
+  crossedTags: {
+    code: 'DSL4203',
+    severity: 'info',
+    summary:
+      'Tags overlap, as in [b][i]x[/b]y[/i]: the tags opened inside are closed and reopened ' +
+      'after the closing tag. Common in real dictionaries and rendered as intended.',
+  },
+  nestedSameTag: {
+    code: 'DSL4204',
+    severity: 'warning',
+    summary: 'A tag is opened inside a tag of the same name; it is nested.',
+  },
+  tagInPlainText: {
+    code: 'DSL4205',
+    severity: 'warning',
+    summary:
+      'A tag or link inside a text-only tag ([t], [s], [video], [ref], [url]) or inside a <<>> ' +
+      'link is kept as text.',
+  },
+  misplacedTag: {
+    code: 'DSL4206',
+    severity: 'warning',
+    summary: 'A tag is outside the tags it is valid in ([preview] outside [s] and [video]).',
+  },
+  nestingTooDeep: {
+    code: 'DSL4207',
+    severity: 'warning',
+    summary: 'Tags are nested more than 64 levels deep; the extra opening tag is kept as text.',
+  },
 } as const satisfies Record<string, DiagnosticSpec>;
 
 /** Symbolic name of a diagnostic, e.g. `unknownCodePage`. */

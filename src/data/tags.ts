@@ -264,16 +264,15 @@ export const TAGS: readonly TagSpec[] = [
 
 const BY_NAME: ReadonlyMap<string, TagSpec> = new Map(TAGS.map((t) => [t.name, t]));
 
-const MARGIN_NAME = /^m([0-9])$/;
-
 /**
  * Returns the margin level of an `m0`..`m9` tag name.
  *
  * @returns 0-9, or `undefined` for a bare `m` and for any other name.
  */
 export function getMarginLevel(name: string): number | undefined {
-  const match = MARGIN_NAME.exec(name);
-  return match === null ? undefined : Number(match[1]);
+  if (name.length !== 2 || name.charCodeAt(0) !== 0x6d) return undefined;
+  const digit = name.charCodeAt(1) - 0x30;
+  return digit >= 0 && digit <= 9 ? digit : undefined;
 }
 
 /**
@@ -284,5 +283,5 @@ export function getMarginLevel(name: string): number | undefined {
  * @returns The spec, or `undefined` if the tag is unknown.
  */
 export function getTagSpec(name: string): TagSpec | undefined {
-  return BY_NAME.get(getMarginLevel(name) === undefined ? name : 'm');
+  return BY_NAME.get(name) ?? (getMarginLevel(name) === undefined ? undefined : BY_NAME.get('m'));
 }
