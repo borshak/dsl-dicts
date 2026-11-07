@@ -160,7 +160,11 @@ export const COLOR_NAMES = [
   'yellowgreen',
 ] as const;
 
-/** A color name allowed in `[c name]`. */
+/**
+ * A color name allowed in `[c name]`.
+ *
+ * @experimental Part of the tag registry.
+ */
 export type ColorName = (typeof COLOR_NAMES)[number];
 
 const KNOWN: ReadonlySet<string> = new Set(COLOR_NAMES);
@@ -169,6 +173,8 @@ const KNOWN: ReadonlySet<string> = new Set(COLOR_NAMES);
  * Tells whether `name` is a color accepted by `[c name]`.
  *
  * The check is case-sensitive, like Lingvo: `red` is known, `Red` is not.
+ *
+ * @experimental Part of the tag registry.
  */
 export function isKnownColor(name: string): name is ColorName {
   return KNOWN.has(name);

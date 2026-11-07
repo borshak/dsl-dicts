@@ -70,7 +70,13 @@ describe('classifier', () => {
     const [raw] = await collect(dict.entries());
     const context: ExtractionContext = {
       dictionary: createDictionaryContext({ header: await dict.header }),
-      options: { labels: 'expand', stress: 'none', secondary: true, splitTranslations: true },
+      options: {
+        labels: true,
+        expandLabels: true,
+        stress: 'none',
+        secondary: true,
+        splitTranslations: true,
+      },
       headwords: raw?.headwords ?? [],
       tilde: 'w',
     };

@@ -10,11 +10,7 @@
 import type { LanguageInfo } from '../data/languages.js';
 import type { SourcePosition } from '../diagnostics/index.js';
 
-/**
- * A directive of the header, such as `#NAME "My dictionary"`.
- *
- * @experimental
- */
+/** A directive of the header, such as `#NAME "My dictionary"`. */
 export interface Directive {
   /** Name as written, without `#`: `NAME`, `INDEX_LANGUAGE`, `ICON_FILE`. */
   readonly name: string;
@@ -29,11 +25,7 @@ export interface Directive {
   readonly position: SourcePosition;
 }
 
-/**
- * The header of a DSL file: the directives at its start.
- *
- * @experimental
- */
+/** The header of a DSL file: the directives at its start. */
 export interface DslHeader {
   /** Every directive of the header, in order, including unknown and repeated ones. */
   readonly directives: readonly Directive[];
@@ -54,8 +46,6 @@ export interface DslHeader {
 
 /**
  * Where a piece of a {@link RawLine}'s text starts in the source.
- *
- * @experimental
  */
 export interface LineSegment {
   /** Index in the line's `text` where the piece starts. */
@@ -72,8 +62,6 @@ export interface LineSegment {
  * Removing a comment from the middle of a line, or a comment that spans lines, makes the text
  * non-contiguous; then `segments` lists where each contiguous piece starts, the first one at
  * index 0. See {@link positionInLine}.
- *
- * @experimental
  */
 export interface RawLine {
   /** Text of the line, without the newline and without comments. */
@@ -84,11 +72,7 @@ export interface RawLine {
   readonly segments?: readonly LineSegment[];
 }
 
-/**
- * Kind of a body line: ordinary text, or a sub-entry marker.
- *
- * @experimental
- */
+/** Kind of a body line: ordinary text, or a sub-entry marker. */
 export type BodyLineKind = 'text' | 'subentry-start' | 'subentry-end';
 
 /** Fields shared by all body lines. */
@@ -98,22 +82,18 @@ interface BodyLineBase extends RawLine {
   readonly indent: string;
 }
 
-/**
- * An ordinary body line.
- *
- * @experimental
- */
+/** An ordinary body line. */
 export interface TextBodyLine extends BodyLineBase {
+  /** The kind of line. */
   readonly kind: 'text';
 }
 
 /**
  * A line that starts a sub-entry: `@ headword`. Several consecutive start lines give one
  * sub-entry several headwords.
- *
- * @experimental
  */
 export interface SubentryStartLine extends BodyLineBase {
+  /** The kind of line. */
   readonly kind: 'subentry-start';
   /** Index of the `@` in `text`. Only tags and spaces may precede it. */
   readonly marker: number;
@@ -123,20 +103,15 @@ export interface SubentryStartLine extends BodyLineBase {
 
 /**
  * A line that ends a sub-entry: a lone `@`, possibly followed by closing tags (`@[/m]`).
- *
- * @experimental
  */
 export interface SubentryEndLine extends BodyLineBase {
+  /** The kind of line. */
   readonly kind: 'subentry-end';
   /** Index of the `@` in `text`. */
   readonly marker: number;
 }
 
-/**
- * A line of an entry's body. `text` has its indentation removed.
- *
- * @experimental
- */
+/** A line of an entry's body. `text` has its indentation removed. */
 export type BodyLine = TextBodyLine | SubentryStartLine | SubentryEndLine;
 
 /**
@@ -144,8 +119,6 @@ export type BodyLine = TextBodyLine | SubentryStartLine | SubentryEndLine;
  *
  * Sub-entries stay in the body, marked by `subentry-start` and `subentry-end` lines, because
  * they live inside the markup structure of their parent entry.
- *
- * @experimental
  */
 export interface RawEntry {
   /** Headword lines, at least one. */
@@ -162,7 +135,6 @@ export interface RawEntry {
  * Maps an index in a line's text to its source position.
  *
  * @param index - Index into `line.text`, from 0 to `line.text.length` inclusive.
- * @experimental
  */
 export function positionInLine(line: RawLine, index: number): SourcePosition {
   let base: LineSegment = { index: 0, position: line.position };

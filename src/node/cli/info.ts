@@ -7,6 +7,7 @@
 import { resolve } from 'node:path';
 import { AST_VERSION, findDiagnosticSpec, VERSION } from '../../index.js';
 import { openDsl } from '../open.js';
+import { openOptions } from './convert.js';
 import { CliError, describeError, EXIT } from './errors.js';
 import type { CliIo } from './io.js';
 import type { InfoOptions } from './options.js';
@@ -16,11 +17,9 @@ import { createReporter } from './report.js';
 /** Runs `info`; returns the exit code. */
 export async function info(options: InfoOptions, io: CliIo): Promise<number> {
   const file = resolve(io.cwd, options.path);
-  const reporter = createReporter(file, io.stderr, 'quiet');
+  const reporter = createReporter(file, io.stderr, options.verbosity);
   const dict = await openDsl(file, {
-    ...(options.encoding === undefined ? {} : { encoding: options.encoding }),
-    ...(options.defaultEncoding === undefined ? {} : { defaultEncoding: options.defaultEncoding }),
-    companions: options.companions,
+    ...openOptions(options, io.cwd),
     positions: false,
     diagnostics: reporter,
   }).catch((error: unknown) => {
@@ -31,7 +30,7 @@ export async function info(options: InfoOptions, io: CliIo): Promise<number> {
   for await (const batch of dict.batches()) entries += batch.length;
   const header = await dict.header;
   const decode = await dict.info;
-  const { tally } = reporter;
+  const counts = dict.diagnosticCounts();
 
   const report: InfoReport = {
     file,
@@ -55,15 +54,16 @@ export async function info(options: InfoOptions, io: CliIo): Promise<number> {
     abbreviations: dict.abbreviations?.size ?? null,
     annotationSections: dict.annotation?.sections.length ?? null,
     entries,
-    diagnostics: { total: tally.total, bySeverity: tally.bySeverity, byCode: tally.byCode },
+    diagnostics: counts,
   };
 
-  const text = options.json ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report);
+  const text =
+    options.format === 'json' ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report);
   await writeChunks(io.stdout, [text]);
   return EXIT.ok;
 }
 
-/** What `info` finds out about a dictionary; printed as is by `--json`. */
+/** What `info` finds out about a dictionary; printed as is by `--format json`. */
 interface InfoReport {
   readonly file: string;
   readonly generator: { readonly name: string; readonly version: string };

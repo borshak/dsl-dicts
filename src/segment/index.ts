@@ -4,8 +4,7 @@
  * @packageDocumentation
  */
 
-export { type SegmentedDsl, type SegmentOptions, segmentDsl } from './segment.js';
-export { createSegmenter, type Segmenter, type SegmenterOptions } from './segmenter.js';
+export { type SegmentDslOptions, type SegmentedDsl, segmentDsl } from './segment.js';
 export {
   type BodyLine,
   type BodyLineKind,

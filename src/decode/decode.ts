@@ -5,11 +5,16 @@
  */
 
 import {
-  createStrictSink,
   type Diagnostic,
+  type DiagnosticCounts,
+  DiagnosticLog,
   type DiagnosticSink,
-  DslError,
+  diagnosticsLimitOf,
+  dslError,
+  optionsSink,
+  type Severity,
 } from '../diagnostics/index.js';
+import { abortError, checkSignal, onAbort } from './abort.js';
 import { ByteDecoder, type EncodingDecision } from './byte-decoder.js';
 import { isAsciiCompatible, resolveEncoding } from './encoding.js';
 import { type DecompressMode, type DecompressStatus, decompress } from './gzip.js';
@@ -22,11 +27,9 @@ const MAX_CHUNK_SIZE = 16 * 1024 * 1024;
 const DEFAULT_ENCODING = 'windows-1251';
 
 /**
- * Options of {@link decodeDsl}.
- *
- * @experimental
+ * Options of {@link decodeDsl}, and of every function that reads a DSL file.
  */
-export interface DecodeOptions {
+export interface DecodeDslOptions {
   /**
    * Forced encoding: a Lingvo code page name (`Cyrillic`) or a WHATWG encoding label
    * (`utf-16le`, `cp1251`). Overrides BOM detection, the heuristics and `#SOURCE_CODE_PAGE`.
@@ -43,8 +46,25 @@ export interface DecodeOptions {
   readonly decompress?: DecompressMode;
   /** Receives diagnostics as they are found, in addition to {@link DecodedText.diagnostics}. */
   readonly diagnostics?: DiagnosticSink;
-  /** Throw a `DslError` on the first diagnostic of severity `error`. Default `false`. */
-  readonly strict?: boolean;
+  /**
+   * Strict mode: stop with a `DslError` at the first diagnostic of this severity or a more
+   * severe one. `true` is `error`; `warning` also fails on warnings, `info` on any diagnostic.
+   * The `diagnostics` sink receives the diagnostic first. Default `false`.
+   */
+  readonly strict?: boolean | Severity;
+  /**
+   * How many diagnostics the result keeps in its `diagnostics` array: the first ones, so that
+   * a file with millions of problems does not fill the memory. The counts
+   * (`diagnosticCounts()`) and the `diagnostics` sink see all of them. Default 10 000.
+   */
+  readonly diagnosticsLimit?: number;
+  /**
+   * Cancels reading: once the signal aborts, the source is cancelled and whatever waits for
+   * the input (the iteration, `info`, the header, the entries) rejects with a `DslError`
+   * `DSL0003` whose `cause` is the abort reason. An aborted signal stops reading before it
+   * starts.
+   */
+  readonly signal?: AbortSignal;
   /**
    * Size of the text chunks to produce, in input bytes (UTF-16 code units for string input).
    * Default 64 KiB. Mainly useful for testing.
@@ -52,11 +72,7 @@ export interface DecodeOptions {
   readonly chunkSize?: number;
 }
 
-/**
- * What the decoder found out about the input.
- *
- * @experimental
- */
+/** What the decoder found out about the input. */
 export interface DecodeInfo extends EncodingDecision {
   /** `gzip` for gzip and dictzip input. */
   readonly compression: 'gzip' | 'none';
@@ -69,11 +85,7 @@ export interface DecodeInfo extends EncodingDecision {
   readonly asciiOnly: boolean;
 }
 
-/**
- * Decoded, newline-normalized text of a DSL file, as an async sequence of chunks.
- *
- * @experimental
- */
+/** Decoded, newline-normalized text of a DSL file, as an async sequence of chunks. */
 export interface DecodedText extends AsyncIterable<string> {
   /**
    * Resolves once the encoding is final and the header area has been scanned. That is right
@@ -86,8 +98,13 @@ export interface DecodedText extends AsyncIterable<string> {
    * stopped before the info is known.
    */
   readonly info: Promise<DecodeInfo>;
-  /** Every diagnostic reported so far, in order. */
+  /**
+   * The diagnostics reported so far, in order: the first `diagnosticsLimit` of them. The
+   * array is the same on every read and grows as diagnostics are reported.
+   */
   readonly diagnostics: readonly Diagnostic[];
+  /** How many diagnostics were reported so far, by code and severity, beyond the limit too. */
+  diagnosticCounts(): DiagnosticCounts;
 }
 
 type Report = (diagnostic: Diagnostic) => void;
@@ -98,6 +115,7 @@ interface ResolvedOptions {
   readonly defaultEncoding: () => string;
   readonly decompress: DecompressMode;
   readonly chunkSize: number;
+  readonly signal: AbortSignal | undefined;
 }
 
 /**
@@ -119,31 +137,35 @@ interface ResolvedOptions {
  *
  * @throws DslError synchronously for invalid arguments: `DSL0001` (bad source or option),
  *   `DSL1002` (unknown encoding), `DSL1003` (encoding unsupported by this runtime).
- * @experimental
  */
-export function decodeDsl(source: DslSource, options: DecodeOptions = {}): DecodedText {
+export function decodeDsl(source: DslSource, options: DecodeDslOptions = {}): DecodedText {
+  return createDecodedText(source, options);
+}
+
+/** {@link decodeDsl}, with the internals of the result. Internal. */
+export function createDecodedText(source: DslSource, options: DecodeDslOptions): DecodedTextImpl {
   const resolved = resolveOptions(options);
   if (typeof source === 'string') {
-    return new DecodedTextImpl(options, (_report, publish) =>
+    return new DecodedTextImpl(options, resolved.signal, (_report, publish) =>
       decodeString(source, resolved.chunkSize, publish),
     );
   }
-  const chunks = toByteChunks(source);
-  return new DecodedTextImpl(options, (report, publish) =>
+  const chunks = toByteChunks(source, resolved.signal);
+  return new DecodedTextImpl(options, resolved.signal, (report, publish) =>
     decodeBytes(chunks, resolved, report, publish),
   );
 }
 
-function resolveOptions(options: DecodeOptions): ResolvedOptions {
+function resolveOptions(options: DecodeDslOptions): ResolvedOptions {
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
+    throw dslError('invalidArgument', 'Options must be an object.');
   }
   const { decompress = 'auto', chunkSize = DEFAULT_CHUNK_SIZE } = options;
   if (decompress !== 'auto' && decompress !== 'gzip' && decompress !== 'none') {
-    throw DslError.of('invalidArgument', `Invalid decompress option: ${String(decompress)}.`);
+    throw dslError('invalidArgument', `Invalid decompress option: ${String(decompress)}.`);
   }
   if (!Number.isInteger(chunkSize) || chunkSize < 1 || chunkSize > MAX_CHUNK_SIZE) {
-    throw DslError.of(
+    throw dslError(
       'invalidArgument',
       `chunkSize must be an integer from 1 to ${MAX_CHUNK_SIZE}, got ${String(chunkSize)}.`,
     );
@@ -155,7 +177,7 @@ function resolveOptions(options: DecodeOptions): ResolvedOptions {
     defaultEncoding = () => {
       const resolution = resolveEncoding(DEFAULT_ENCODING);
       if (resolution.ok) return resolution.encoding;
-      throw DslError.of(
+      throw dslError(
         'unsupportedEncoding',
         `This runtime cannot decode ${DEFAULT_ENCODING}, the default encoding of 8-bit files; ` +
           'set the encoding or defaultEncoding option.',
@@ -164,29 +186,29 @@ function resolveOptions(options: DecodeOptions): ResolvedOptions {
   } else {
     const value = resolveOption('defaultEncoding', options.defaultEncoding);
     if (!isAsciiCompatible(value)) {
-      throw DslError.of(
+      throw dslError(
         'invalidArgument',
         `defaultEncoding must be an ASCII-compatible encoding, got ${value}.`,
       );
     }
     defaultEncoding = () => value;
   }
-  return { encoding, defaultEncoding, decompress, chunkSize };
+  return { encoding, defaultEncoding, decompress, chunkSize, signal: checkSignal(options.signal) };
 }
 
 function resolveOption(name: string, value: unknown): string {
   if (typeof value !== 'string') {
-    throw DslError.of('invalidArgument', `The ${name} option must be a string.`);
+    throw dslError('invalidArgument', `The ${name} option must be a string.`);
   }
   const resolution = resolveEncoding(value);
   if (resolution.ok) return resolution.encoding;
   if (resolution.reason === 'unsupported') {
-    throw DslError.of(
+    throw dslError(
       'unsupportedEncoding',
       `The ${name} option names ${resolution.encoding}, which this runtime cannot decode.`,
     );
   }
-  throw DslError.of('unknownEncoding', `The ${name} option is not a known encoding: "${value}".`);
+  throw dslError('unknownEncoding', `The ${name} option is not a known encoding: "${value}".`);
 }
 
 async function* decodeBytes(
@@ -260,10 +282,18 @@ function withDirective(info: DecodeInfo, directive: string | undefined): DecodeI
   return directive === undefined ? info : { ...info, directive };
 }
 
-/** Single-use result of {@link decodeDsl}: an iterable with a lazily driven `info`. */
-class DecodedTextImpl implements DecodedText {
-  readonly diagnostics: Diagnostic[] = [];
+/** What a pull returns when the signal aborted while it waited. */
+const ABORTED: unique symbol = Symbol('aborted');
+
+/** Single-use result of {@link decodeDsl}: an iterable with a lazily driven `info`. Internal. */
+export class DecodedTextImpl implements DecodedText {
+  readonly #log: DiagnosticLog;
   readonly #source: AsyncGenerator<string>;
+  readonly #signal: AbortSignal | undefined;
+  readonly #unlisten: () => void;
+  #aborted: Promise<typeof ABORTED> | undefined;
+  #wake: (value: typeof ABORTED) => void = () => {};
+  #known: DecodeInfo | undefined;
   readonly #info: Promise<DecodeInfo>;
   #resolveInfo: Publish = () => {};
   #rejectInfo: (error: unknown) => void = () => {};
@@ -278,10 +308,12 @@ class DecodedTextImpl implements DecodedText {
   #iterated = false;
 
   constructor(
-    options: DecodeOptions,
+    options: DecodeDslOptions,
+    signal: AbortSignal | undefined,
     start: (report: Report, publish: Publish) => AsyncGenerator<string>,
   ) {
-    const sink = options.strict ? createStrictSink(options.diagnostics) : options.diagnostics;
+    const sink = optionsSink(options);
+    this.#log = new DiagnosticLog(diagnosticsLimitOf(options.diagnosticsLimit));
     this.#info = new Promise<DecodeInfo>((resolve, reject) => {
       this.#resolveInfo = resolve;
       this.#rejectInfo = reject;
@@ -289,13 +321,34 @@ class DecodedTextImpl implements DecodedText {
     // Rejections reach whoever awaits `info`; nobody else needs to handle them.
     this.#info.catch(() => {});
     const report: Report = (diagnostic) => {
-      this.diagnostics.push(diagnostic);
+      this.#log.record(diagnostic);
       sink?.report(diagnostic);
     };
     this.#source = start(report, (info) => {
       this.#infoSettled = true;
+      this.#known = info;
       this.#resolveInfo(info);
     });
+    this.#signal = signal;
+    if (signal !== undefined) {
+      this.#aborted = new Promise((resolve) => {
+        this.#wake = resolve;
+      });
+    }
+    this.#unlisten = onAbort(signal, () => this.#abort());
+  }
+
+  get diagnostics(): readonly Diagnostic[] {
+    return this.#log.kept;
+  }
+
+  diagnosticCounts(): DiagnosticCounts {
+    return this.#log.counts();
+  }
+
+  /** The info if it is already known, without reading. Internal. */
+  get knownInfo(): DecodeInfo | undefined {
+    return this.#known;
   }
 
   get info(): Promise<DecodeInfo> {
@@ -308,7 +361,7 @@ class DecodedTextImpl implements DecodedText {
 
   [Symbol.asyncIterator](): AsyncIterator<string> {
     if (this.#iterated) {
-      throw DslError.of('alreadyConsumed', 'The decoded text can be iterated only once.');
+      throw dslError('alreadyConsumed', 'The decoded text can be iterated only once.');
     }
     this.#iterated = true;
     return {
@@ -330,19 +383,49 @@ class DecodedTextImpl implements DecodedText {
   }
 
   async #pullOnce(): Promise<void> {
+    if (this.#done) return;
+    if (this.#signal?.aborted) {
+      this.#abort();
+      return;
+    }
     try {
-      const result = await this.#source.next();
-      if (result.done) this.#finish(DslError.of('cancelled', 'Decoding ended without a result.'));
+      const next = this.#source.next();
+      let result: IteratorResult<string> | typeof ABORTED;
+      if (this.#aborted === undefined) {
+        result = await next;
+      } else {
+        // The read may settle after an abort: its outcome no longer matters.
+        next.catch(() => {});
+        result = await Promise.race([next, this.#aborted]);
+      }
+      if (result === ABORTED || this.#done) return;
+      if (result.done) this.#finish(dslError('cancelled', 'Decoding ended without a result.'));
       else this.#queue.push(result.value);
     } catch (error) {
+      if (this.#done) return;
       this.#failed = true;
       this.#error = error;
       this.#finish(error);
     }
   }
 
+  /** Stops reading for good: what is buffered is dropped, and every reader gets the error. */
+  #abort(): void {
+    if (this.#done || this.#signal === undefined) return;
+    const error = abortError(this.#signal);
+    this.#queue = [];
+    this.#head = 0;
+    this.#failed = true;
+    this.#error = error;
+    this.#finish(error);
+    this.#wake(ABORTED);
+    // Closes the source once its pending read, if any, has settled.
+    this.#source.return(undefined).catch(() => {});
+  }
+
   #finish(error: unknown): void {
     this.#done = true;
+    this.#unlisten();
     if (!this.#infoSettled) {
       this.#infoSettled = true;
       this.#rejectInfo(error);
@@ -370,7 +453,7 @@ class DecodedTextImpl implements DecodedText {
     this.#queue = [];
     this.#head = 0;
     if (!this.#done) {
-      this.#finish(DslError.of('cancelled', 'Decoding was stopped before the info was known.'));
+      this.#finish(dslError('cancelled', 'Decoding was stopped before the info was known.'));
       await this.#source.return(undefined);
     }
     return { value: undefined, done: true };

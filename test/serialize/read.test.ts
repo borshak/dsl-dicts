@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { article } from '../../src/article/index.js';
 import {
   AST_VERSION,
-  createDiagnosticTally,
   createJsonlHeader,
   type JsonlHeaderRecord,
+  type JsonlRecord,
   parseDsl,
   parseJsonlHeader,
   readJsonl,
@@ -129,6 +129,18 @@ describe('parseJsonlHeader', () => {
     expect(plugin({ name: 'article', version: 'x' })).toBe('DSL0001');
   });
 
+  it('compares the minor version too for 0.x plugins, as semantic versioning does', () => {
+    const at = (version: string) => ({ ...HEADER, plugin: { name: 'p', version } });
+    const plugin = (expected: string, found: string) =>
+      codeOf(() => parseJsonlHeader(line(at(found)), { plugin: { name: 'p', version: expected } }));
+    expect(plugin('0.2.0', '0.2.5')).toBeUndefined();
+    expect(plugin('0.2.1', '0.2.0')).toBeUndefined();
+    expect(plugin('0.2.0', '0.3.0')).toBe('DSL7004');
+    expect(plugin('0.3.0', '0.2.0')).toBe('DSL7004');
+    expect(plugin('0.2.0', '1.2.0')).toBe('DSL7004');
+    expect(plugin('1.0.0', '1.7.0')).toBeUndefined();
+  });
+
   it('rejects invalid expectations', () => {
     expect(codeOf(() => parseJsonlHeader(line(HEADER), null as never))).toBe('DSL0001');
   });
@@ -246,15 +258,26 @@ describe('readJsonl', () => {
     expect(await asyncCodeOf(readJsonl([1 as never]))).toBe('DSL0001');
   });
 
-  it('reads a document with a tally summary back', async () => {
-    const tally = createDiagnosticTally();
-    const dict = parseDsl(NOISY, { diagnostics: tally });
-    const lines = await collect(toJsonl(dict, { summary: true, tally }));
+  it('reads a document with a plugin summary back', async () => {
+    const dict = parseDsl(NOISY);
+    const lines = await collect(toJsonl(dict, { plugin: article, summary: true }));
     const records = await collect((await readJsonl(lines)).records);
     expect(records.at(-1)).toEqual({
       type: 'summary',
       entries: 3,
       diagnostics: { DSL4101: 1, DSL4202: 1 },
     });
+  });
+
+  it('types the payload of the entries as asked', async () => {
+    const lines = await collect(toJsonl(dictOf(TEXT), { plugin: article }));
+    const reader = await readJsonl<{ readonly kind: string }>(lines);
+    for await (const record of reader.records) {
+      if (record.type === 'entry') {
+        expectTypeOf(record.data).toEqualTypeOf<{ readonly kind: string }>();
+        expect(record.data.kind).toBe('zone-marked');
+      }
+    }
+    expectTypeOf((await readJsonl(lines)).records).toEqualTypeOf<AsyncIterable<JsonlRecord>>();
   });
 });

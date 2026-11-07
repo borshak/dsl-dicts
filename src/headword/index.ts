@@ -6,10 +6,8 @@
 
 export type { Headword } from '../markup/ast.js';
 export {
-  type HeadwordOptions,
-  MAX_EXPANDED_LENGTH,
-  MAX_VARIANTS,
   type ParseHeadwordOptions,
+  type ParseHeadwordsOptions,
   parseHeadword,
   parseHeadwords,
 } from './parse.js';

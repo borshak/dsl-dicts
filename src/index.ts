@@ -14,6 +14,7 @@ export {
   parseAbbreviations,
   parseAnnotation,
 } from './companion/index.js';
+export { type ColorName, isKnownColor } from './data/colors.js';
 export {
   findLanguageById,
   findLanguageByName,
@@ -23,9 +24,16 @@ export {
   resolveLanguageName,
 } from './data/languages.js';
 export {
+  getTagSpec,
+  type TagAttrs,
+  type TagDialect,
+  type TagKind,
+  type TagSpec,
+} from './data/tags.js';
+export {
+  type DecodeDslOptions,
   type DecodedText,
   type DecodeInfo,
-  type DecodeOptions,
   type DecompressMode,
   type DslSource,
   decodeDsl,
@@ -39,7 +47,7 @@ export {
   DIAGNOSTICS,
   type Diagnostic,
   type DiagnosticCode,
-  type DiagnosticName,
+  type DiagnosticCounts,
   type DiagnosticSink,
   type DiagnosticSpec,
   DslError,
@@ -50,24 +58,21 @@ export {
 } from './diagnostics/index.js';
 export {
   type Headword,
-  type HeadwordOptions,
-  MAX_EXPANDED_LENGTH,
-  MAX_VARIANTS,
   type ParseHeadwordOptions,
+  type ParseHeadwordsOptions,
   parseHeadword,
   parseHeadwords,
 } from './headword/index.js';
 export {
   AST_VERSION,
   type BodyInput,
-  type DeepReadonly,
   isParentNode,
   type LineBreakNode,
   type LinkNode,
   type MarkupNode,
-  type MarkupOptions,
   type NodeLocation,
   type ParentNode,
+  type ParseBodyOptions,
   type ParseMarkupOptions,
   parseBody,
   parseMarkup,
@@ -79,6 +84,7 @@ export {
   type Visitor,
   type WalkResult,
   walk,
+  walkEntry,
 } from './markup/index.js';
 export {
   type BodyMode,
@@ -86,12 +92,14 @@ export {
   type ParseDslOptions,
   type ParsedDsl,
   parseDsl,
+  type RawParseDslOptions,
 } from './parse/index.js';
 export {
   createDictionaryContext,
   createPluginDiagnostic,
   type DictionaryContext,
   type DictionaryContextInit,
+  type DslFiles,
   type DslPlugin,
   definePlugin,
   type EntryTransform,
@@ -103,34 +111,30 @@ export {
 export {
   hasZones,
   normalizeLabel,
-  type PlainTextOptions,
   SEARCH_ZONES,
+  type ToPlainTextOptions,
   toPlainText,
+  type ZoneTextOptions,
   zoneText,
 } from './render/index.js';
 export {
   type BodyLine,
   type BodyLineKind,
-  createSegmenter,
   type Directive,
   type DslHeader,
   type LineSegment,
   positionInLine,
   type RawEntry,
   type RawLine,
+  type SegmentDslOptions,
   type SegmentedDsl,
-  type Segmenter,
-  type SegmenterOptions,
-  type SegmentOptions,
   type SubentryEndLine,
   type SubentryStartLine,
   segmentDsl,
   type TextBodyLine,
 } from './segment/index.js';
 export {
-  createDiagnosticTally,
   createJsonlHeader,
-  type DiagnosticTally,
   JSONL_FORMAT,
   JSONL_FORMAT_VERSION,
   type JsonlComponent,

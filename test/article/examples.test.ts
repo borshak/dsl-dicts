@@ -3,7 +3,7 @@ import type { Example } from '../../src/article/index.js';
 import { articleOf, entry } from './helpers.js';
 
 /** The examples of a dictionary entry whose body is one translation and these lines. */
-async function examplesOf(...lines: string[]): Promise<Example[]> {
+async function examplesOf(...lines: string[]): Promise<readonly Example[]> {
   const a = await articleOf(entry('[m1][trn]t[/trn][/m]', ...lines.map((l) => `[m2]${l}[/m]`)));
   return a.senses[0]?.examples ?? [];
 }

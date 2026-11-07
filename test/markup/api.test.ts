@@ -3,14 +3,18 @@ import {
   AST_VERSION,
   createCollectingSink,
   createStrictSink,
-  type DeepReadonly,
   DslError,
   isParentNode,
+  type LinkNode,
   type MarkupNode,
   parseBody,
+  parseDsl,
   parseMarkup,
   type TagNode,
+  type TextNode,
+  type TildeNode,
   walk,
+  walkEntry,
 } from '../../src/index.js';
 import { parse, show } from './helpers.js';
 
@@ -58,9 +62,7 @@ describe('API', () => {
   it('types the AST as read-only', () => {
     const nodes: readonly MarkupNode[] = parseMarkup('[b]x[/b]');
     expectTypeOf(nodes[0] as TagNode).toHaveProperty('children');
-    expectTypeOf<DeepReadonly<{ a: { b: string[] } }>>().toEqualTypeOf<{
-      readonly a: { readonly b: readonly string[] };
-    }>();
+    expectTypeOf<LinkNode['children'][number]>().toEqualTypeOf<TextNode | TildeNode>();
     const tag = nodes[0] as TagNode;
     // @ts-expect-error The AST is read-only.
     tag.name = 'i';
@@ -113,6 +115,85 @@ describe('walk', () => {
   it('knows which nodes have children', () => {
     expect(nodes.map(isParentNode)).toEqual([false, true, true]);
     expect(show(nodes)).toBe('"a" b("b" i("c")) <<"d">>');
+  });
+});
+
+describe('walkEntry', () => {
+  const text = 'a{[b]x[/b]}\nc\n\t[m1]one\n\t@ ~ {[i]y[/i]}\n\tsub\n\t@\n';
+
+  async function firstEntry() {
+    for await (const entry of parseDsl(text, { positions: false }).entries()) return entry;
+    throw new Error('no entry');
+  }
+
+  it('visits the headwords, then the body, sub-entry headwords included', async () => {
+    const entry = await firstEntry();
+    const seen: string[] = [];
+    const completed = walkEntry(entry, {
+      enter(node, parent, index) {
+        seen.push(
+          `+${node.type === 'text' ? node.text : node.type}:${parent?.type ?? '-'}:${index}`,
+        );
+      },
+      leave(node) {
+        if (node.type !== 'text') seen.push(`-${node.type}`);
+      },
+    });
+    expect(completed).toBe(true);
+    expect(seen).toEqual([
+      // a{[b]x[/b]}
+      '+a:-:0',
+      '+tag:-:1',
+      '+x:tag:0',
+      '-tag',
+      // c
+      '+c:-:0',
+      // the body: [m1]one, then the sub-entry with its headword's display first
+      '+tag:-:0',
+      '+one:tag:0',
+      '+subentry:tag:1',
+      '+tilde:-:0',
+      '-tilde',
+      '+ :-:1',
+      '+tag:-:2',
+      '+y:tag:0',
+      '-tag',
+      '+sub:subentry:0',
+      '-subentry',
+      '-tag',
+    ]);
+  });
+
+  it('is what walk does on the body, plus the headwords', async () => {
+    const entry = await firstEntry();
+    const all: string[] = [];
+    walkEntry(entry, (node) => {
+      if (node.type === 'text') all.push(node.text);
+    });
+    const body: string[] = [];
+    walk(entry.body, (node) => {
+      if (node.type === 'text') body.push(node.text);
+    });
+    expect(all).toEqual(['a', 'x', 'c', 'one', ' ', 'y', 'sub']);
+    expect(body).toEqual(['one', 'sub']);
+  });
+
+  it('stops in the headwords and skips a sub-entry with its headwords', async () => {
+    const entry = await firstEntry();
+    const seen: string[] = [];
+    expect(
+      walkEntry(entry, (node) => {
+        if (node.type === 'text') seen.push(node.text);
+        return node.type === 'text' && node.text === 'x' ? 'stop' : undefined;
+      }),
+    ).toBe(false);
+    expect(seen).toEqual(['a', 'x']);
+    seen.length = 0;
+    walkEntry(entry, (node) => {
+      if (node.type === 'text') seen.push(node.text);
+      return node.type === 'subentry' ? 'skip' : undefined;
+    });
+    expect(seen).toEqual(['a', 'x', 'c', 'one']);
   });
 });
 

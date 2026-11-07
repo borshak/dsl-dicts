@@ -165,7 +165,9 @@ describe('abbreviations in plain text', () => {
     const map = await parseAbbreviations(ABRV);
     const expected = 'adjective singular and plural noun xyz text';
     const entries = await collect(parseDsl(HEADER + DICT, { abbreviations: map }).entries());
-    expect(toPlainText(entries[0]?.body ?? [], { abbreviations: map })).toBe(expected);
+    expect(toPlainText(entries[0]?.body ?? [], { abbreviations: map, expandLabels: true })).toBe(
+      expected,
+    );
     const out = await collect(
       parseDsl(HEADER + DICT, { abbreviations: map }).entries({
         plugin: plainText,

@@ -37,8 +37,10 @@ export type ArticleKind =
  * @experimental
  */
 export interface ArticleHeadword {
+  /** The headword as shown (`Headword.text`). */
   readonly text: string;
-  readonly variants: string[];
+  /** The index forms (`Headword.variants`). */
+  readonly variants: readonly string[];
 }
 
 /**
@@ -52,7 +54,7 @@ export interface Label {
   /**
    * What the label stands for, from the dictionary's abbreviations (`_abrv.dsl`, see
    * `DictionaryContext.abbreviations`): absent if there are none, the label is not one of
-   * them, or the plugin option `labels` is `keep`.
+   * them, or the plugin option `expandLabels` is `false`.
    */
   readonly expansion?: string;
 }
@@ -107,6 +109,7 @@ export interface Reference {
  * @experimental
  */
 export interface ExampleText {
+  /** The text, `~` substituted and whitespace collapsed. */
   readonly text: string;
   /**
    * The Lingvo name of the language (`English`): of the source, from its `[lang]` tag, or
@@ -123,11 +126,12 @@ export interface ExampleText {
  * @experimental
  */
 export interface Example {
+  /** The phrase in the source language, before the dash. */
   readonly source: ExampleText;
   /** The translation, after the dash (`—`, `–`, ` - `, or `≈`, which it keeps); may be absent. */
   readonly target?: ExampleText;
   /** Labels of the example, such as `посл.` (a proverb) before or just after the dash. */
-  readonly labels?: Label[];
+  readonly labels?: readonly Label[];
 }
 
 /**
@@ -141,23 +145,27 @@ export interface Sense {
    * and `1.`, `а` for `а)`, `II` for a homonym `II`. Absent for an unnumbered sense.
    */
   readonly number?: string;
-  readonly labels: Label[];
+  /** Labels of the sense (`[p]`), such as a register or a domain. */
+  readonly labels: readonly Label[];
   /**
    * The translations (`[trn]`), without labels and comments: the text of the zone split at
    * semicolons outside brackets (`a, b; c` gives `a, b` and `c`), unless the plugin option
    * `splitTranslations` is `false`.
    */
-  readonly translations: string[];
-  readonly examples: Example[];
+  readonly translations: readonly string[];
+  /** Usage examples (`[ex]`). */
+  readonly examples: readonly Example[];
   /** Comments (`[com]`), without the parentheses that enclose a whole comment. */
-  readonly comments: string[];
-  readonly references: Reference[];
-  readonly senses: Sense[];
+  readonly comments: readonly string[];
+  /** Links of the sense: synonyms, see-also. */
+  readonly references: readonly Reference[];
+  /** Sub-senses, nested by their numbering and paragraph levels. */
+  readonly senses: readonly Sense[];
   /**
    * Text of the sense that is in no zone and could not be placed, such as grammatical
    * government outside the translation (`(an A)`). Absent if none.
    */
-  readonly notes?: string[];
+  readonly notes?: readonly string[];
 }
 
 /**
@@ -171,27 +179,28 @@ export interface Sense {
 export interface Article {
   /** The shape of the entry and the extractor that built the article. */
   readonly kind: ArticleKind;
-  readonly headwords: ArticleHeadword[];
+  /** The headwords of the entry, or of the sub-entry. */
+  readonly headwords: readonly ArticleHeadword[];
   /** Transcriptions (`[t]`, or a bracketed `[...]` before the first sense), as written. */
-  readonly transcriptions: string[];
+  readonly transcriptions: readonly string[];
   /** Media files, wherever they are in the entry. */
-  readonly media: Media[];
+  readonly media: readonly Media[];
   /** Labels of the entry: those before the first sense, such as the part of speech. */
-  readonly labels: Label[];
+  readonly labels: readonly Label[];
   /** The senses, in order, nested by their numbering and paragraph levels. */
-  readonly senses: Sense[];
+  readonly senses: readonly Sense[];
   /** Links of the entry as a whole: before the first sense, or after a section separator. */
-  readonly references: Reference[];
+  readonly references: readonly Reference[];
   /** Comments of the entry as a whole, such as grammatical forms before the first sense. */
-  readonly comments: string[];
+  readonly comments: readonly string[];
   /** The sub-entries (`@ headword` ... `@`), as articles of their own. */
-  readonly subentries: Article[];
+  readonly subentries: readonly Article[];
   /**
    * Text of the entry as a whole that is in no zone and could not be placed. Absent if none.
    * Together with `Sense.notes`, nothing of the body is silently dropped but punctuation,
    * numbering and whitespace.
    */
-  readonly notes?: string[];
+  readonly notes?: readonly string[];
 }
 
 /**

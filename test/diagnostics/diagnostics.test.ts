@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { createDiagnostic } from '../../src/diagnostics/index.js';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { CATALOG, createDiagnostic, dslError } from '../../src/diagnostics/index.js';
 import {
   createCollectingSink,
   createStrictSink,
@@ -7,6 +7,7 @@ import {
   type Diagnostic,
   DslError,
   findDiagnosticSpec,
+  type Severity,
 } from '../../src/index.js';
 
 // Bundler-level imports instead of node:fs, so the test also runs in a browser.
@@ -16,7 +17,7 @@ const sources = import.meta.glob<string>('../../src/**/*.ts', {
   eager: true,
 });
 
-const specs = Object.entries(DIAGNOSTICS);
+const specs = Object.entries(CATALOG);
 
 describe('diagnostic catalog', () => {
   it('has unique, well-formed codes in ascending order', () => {
@@ -57,8 +58,22 @@ describe('diagnostic catalog', () => {
   });
 
   it('finds specs by code', () => {
-    expect(findDiagnosticSpec('DSL1202')).toBe(DIAGNOSTICS.unknownCodePage);
+    expect(findDiagnosticSpec('DSL1202')).toBe(DIAGNOSTICS.get('DSL1202'));
+    expect(findDiagnosticSpec('DSL1202')).toEqual({
+      ...CATALOG.unknownCodePage,
+      name: 'unknownCodePage',
+    });
     expect(findDiagnosticSpec('DSL9999')).toBeUndefined();
+    expect(findDiagnosticSpec('my-plugin/x')).toBeUndefined();
+  });
+
+  it('exports the catalog by code, in code order, with informational names', () => {
+    expect([...DIAGNOSTICS.keys()]).toEqual(specs.map(([, spec]) => spec.code));
+    for (const [code, spec] of DIAGNOSTICS) {
+      expect(spec.code).toBe(code);
+      expect(Object.isFrozen(spec)).toBe(true);
+      expect(spec.name).toMatch(/^[a-z][A-Za-z]+$/);
+    }
   });
 });
 
@@ -103,13 +118,41 @@ describe('sinks and DslError', () => {
     expect(() => createStrictSink().report(error)).toThrow(DslError);
   });
 
-  it('DslError.of looks up the code', () => {
+  it('strict sink fails from a severity on', () => {
+    const info = createDiagnostic('codePageIgnored', 'i');
+    const fails = (severity: Severity, diagnostic: Diagnostic): boolean => {
+      try {
+        createStrictSink(undefined, severity).report(diagnostic);
+        return false;
+      } catch {
+        return true;
+      }
+    };
+    expect([info, warning, error].map((d) => fails('error', d))).toEqual([false, false, true]);
+    expect([info, warning, error].map((d) => fails('warning', d))).toEqual([false, true, true]);
+    expect([info, warning, error].map((d) => fails('info', d))).toEqual([true, true, true]);
+    expect(() => createStrictSink(undefined, 'fatal' as Severity)).toThrow(
+      expect.objectContaining({ code: 'DSL0001' }),
+    );
+  });
+
+  it('creates errors by name internally, and by any code publicly', () => {
     const cause = new Error('c');
-    const e = DslError.of('unknownEncoding', 'm', cause);
+    const e = dslError('unknownEncoding', 'm', cause);
     expect(e).toBeInstanceOf(Error);
     expect(e).toMatchObject({ code: 'DSL1002', message: 'm', cause });
     expect(e.diagnostic).toBeUndefined();
-    expect('cause' in DslError.of('unknownEncoding', 'm')).toBe(false);
+    expect('cause' in dslError('unknownEncoding', 'm')).toBe(false);
+    const custom = new DslError('my-plugin/x', 'n', { plugin: 'my-plugin' });
+    expect(custom).toMatchObject({ code: 'my-plugin/x', plugin: 'my-plugin' });
+    // Fields that are not set are not own properties.
+    expect(Object.keys(custom).sort()).toEqual(['code', 'name', 'plugin']);
+  });
+
+  it('admits codes of plugins in diagnostics', () => {
+    const diagnostic: Diagnostic = { code: 'my-plugin/x', severity: 'info', message: 'm' };
+    expectTypeOf(diagnostic.code).toExtend<string>();
+    expect(diagnostic.code).toBe('my-plugin/x');
   });
 
   it('keeps diagnostics serializable', () => {

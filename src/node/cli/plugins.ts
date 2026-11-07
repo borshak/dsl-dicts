@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { article } from '../../article/index.js';
 import { DslError, type DslPlugin, definePlugin } from '../../index.js';
@@ -14,29 +14,37 @@ import { CliError, EXIT, usageError } from './errors.js';
 /** A plugin whose types are not known. */
 export type AnyPlugin = DslPlugin<unknown, unknown>;
 
-/** The names of the views: `ast` is the AST itself, the others are built-in plugins. */
-export const VIEWS = ['ast', 'article', 'plain-text', 'search-text'] as const;
+/** The built-in plugins, by the name `--plugin` takes. */
+export const BUILT_IN_PLUGINS: Readonly<Record<string, AnyPlugin>> = {
+  article: article as AnyPlugin,
+  'plain-text': plainText as AnyPlugin,
+  'search-text': searchText as AnyPlugin,
+};
 
-/** A view: what is exported. */
-export type View = (typeof VIEWS)[number];
-
-/** Whether a string names a view. */
-export function isView(value: string): value is View {
-  return (VIEWS as readonly string[]).includes(value);
+/**
+ * Whether a `--plugin` value is the path of a module rather than a built-in name: it has a
+ * path separator, or ends with `.js` or `.mjs`.
+ */
+export function isPluginPath(value: string): boolean {
+  return value.includes('/') || value.includes(sep) || /\.m?js$/i.test(value);
 }
 
-/** The built-in plugin of a view; `undefined` for `ast`. */
-export function pluginOfView(view: View): AnyPlugin | undefined {
-  switch (view) {
-    case 'ast':
-      return undefined;
-    case 'article':
-      return article as AnyPlugin;
-    case 'plain-text':
-      return plainText as AnyPlugin;
-    case 'search-text':
-      return searchText as AnyPlugin;
+/**
+ * The plugin a `--plugin` value names: a built-in plugin, or the default export of a module.
+ *
+ * @throws CliError with exit code 1 for an unknown name, 3 if the module cannot be loaded or
+ * exports no valid plugin.
+ */
+export async function resolvePlugin(value: string, cwd: string): Promise<AnyPlugin> {
+  if (isPluginPath(value)) return loadPlugin(value, cwd);
+  const plugin = Object.hasOwn(BUILT_IN_PLUGINS, value) ? BUILT_IN_PLUGINS[value] : undefined;
+  if (plugin === undefined) {
+    throw usageError(
+      `Unknown plugin ${value}: use ${Object.keys(BUILT_IN_PLUGINS).join(', ')}, or the path ` +
+        'of a plugin module (such as ./my-plugin.js). Leave --plugin out for the AST.',
+    );
   }
+  return plugin;
 }
 
 /**

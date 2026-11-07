@@ -40,21 +40,21 @@ describe('attributes', () => {
   });
 
   it('reads [lang id=...] and [lang name="..."]', () => {
-    expect(tag('[lang id=1033]x[/lang]').node.attrs).toEqual({ id: 1033 });
-    expect(tag('[lang id="1049"]x[/lang]').node.attrs).toEqual({ id: 1049 });
-    expect(tag('[lang id=2]x[/lang]').node.attrs).toEqual({ id: 2 });
-    expect(tag('[lang name="German"]x[/lang]').node.attrs).toEqual({ name: 'German' });
-    expect(tag('[lang  name = "German" ]x[/lang]').node.attrs).toEqual({ name: 'German' });
+    expect(tag('[lang id=1033]x[/lang]').node.attrs).toEqual({ languageId: 1033 });
+    expect(tag('[lang id="1049"]x[/lang]').node.attrs).toEqual({ languageId: 1049 });
+    expect(tag('[lang id=2]x[/lang]').node.attrs).toEqual({ languageId: 2 });
+    expect(tag('[lang name="German"]x[/lang]').node.attrs).toEqual({ language: 'German' });
+    expect(tag('[lang  name = "German" ]x[/lang]').node.attrs).toEqual({ language: 'German' });
     expect(tag('[lang name=German]x[/lang]').codes).toEqual([]);
   });
 
   it('keeps unknown language ids and names, with a diagnostic', () => {
     expect(tag('[lang id=9999]x[/lang]')).toMatchObject({
-      node: { attrs: { id: 9999 } },
+      node: { attrs: { languageId: 9999 } },
       codes: ['DSL4106'],
     });
     expect(tag('[lang name="Klingon"]x[/lang]')).toMatchObject({
-      node: { attrs: { name: 'Klingon' } },
+      node: { attrs: { language: 'Klingon' } },
       codes: ['DSL4106'],
     });
   });
@@ -62,7 +62,7 @@ describe('attributes', () => {
   it('keeps inexact language names as written, with an info diagnostic', () => {
     for (const name of ['english', 'Spanish', 'RUSSIANSTANDARD']) {
       const { nodes, diagnostics } = parse(`[lang name="${name}"]x[/lang]`);
-      expect((nodes[0] as TagNode).attrs).toEqual({ name });
+      expect((nodes[0] as TagNode).attrs).toEqual({ language: name });
       expect(diagnostics).toMatchObject([{ code: 'DSL4107', severity: 'info' }]);
       expect(resolveLanguageName(name)?.exact).toBe(false);
     }
@@ -77,8 +77,16 @@ describe('attributes', () => {
     expect(tag('[lang =1]x[/lang]').codes).toEqual(['DSL4104', 'DSL4105']);
     expect(tag('[lang dict="x"]x[/lang]').codes).toEqual(['DSL4104']);
     expect(tag('[lang id=1033 id=1049]x[/lang]')).toMatchObject({
-      node: { attrs: { id: 1033 } },
+      node: { attrs: { languageId: 1033 } },
       codes: ['DSL4104'],
+    });
+    expect(tag('[lang name=German name=French]x[/lang]')).toMatchObject({
+      node: { attrs: { language: 'German' } },
+      codes: ['DSL4104'],
+    });
+    expect(tag('[lang id=1033 name=German]x[/lang]').node.attrs).toEqual({
+      languageId: 1033,
+      language: 'German',
     });
   });
 

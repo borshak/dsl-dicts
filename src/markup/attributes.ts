@@ -18,7 +18,13 @@ export type AttributeReporter = (name: DiagnosticName, message: string) => void;
 
 type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
-/** Keys accepted by the `key=value` schemas. */
+/** The field of `TagAttributes` of a key, where its name differs. */
+const FIELDS: Readonly<Record<string, keyof TagAttributes>> = {
+  id: 'languageId',
+  name: 'language',
+};
+
+/** Keys accepted by the `key=value` schemas, as written in the markup. */
 const KEYS: Readonly<Record<string, readonly string[]>> = {
   lang: ['id', 'name'],
   ref: ['dict', 'target'],
@@ -32,7 +38,8 @@ const KEYS: Readonly<Record<string, readonly string[]>> = {
  * - `color` (`[c]`): one bare word, kept even if it is not a known color (`DSL4106`).
  * - `lang`, `ref`, `url`: `key=value` pairs separated by spaces; a value is either bare (up to
  *   the next space) or in double quotes, with `\x` escapes resolved. Keys are those of the
- *   schema (`id`/`name`, `dict`/`target`, `target`); the first of repeated keys wins. A
+ *   schema (`id`/`name`, `dict`/`target`, `target`); the first of repeated keys wins. The
+ *   `id` and `name` of `[lang]` are the fields `languageId` and `language`. A
  *   language id or name unknown to Lingvo is kept (`DSL4106`); a name that is not exact but
  *   resolves leniently (`resolveLanguageName`) is kept as written (`DSL4107`, info);
  *   `[lang]` needs an id or a name (`DSL4105`).
@@ -155,7 +162,7 @@ function setPair(
     report('invalidAttribute', `[${spec.name}] has no attribute ${key}; it is ignored.`);
     return;
   }
-  if ((attrs as Record<string, unknown>)[key] !== undefined) {
+  if ((attrs as Record<string, unknown>)[FIELDS[key] ?? key] !== undefined) {
     report(
       'invalidAttribute',
       `The attribute ${key} of [${spec.name}] is repeated; it is ignored.`,
@@ -172,7 +179,7 @@ function setPair(
       if (findLanguageById(id) === undefined) {
         report('unknownAttributeValue', `The language id ${id} is not known to Lingvo.`);
       }
-      attrs.id = id;
+      attrs.languageId = id;
       return;
     }
     case 'name': {
@@ -188,7 +195,7 @@ function setPair(
           `"${value}" is not an exact Lingvo language name; it resolves to ${match.language.name}.`,
         );
       }
-      attrs.name = value;
+      attrs.language = value;
       return;
     }
     case 'dict':

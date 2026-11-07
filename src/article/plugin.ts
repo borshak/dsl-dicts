@@ -16,7 +16,7 @@ import {
 import { type Classifier, classifyBody } from './classify.js';
 import type { ExtractionContext, ResolvedArticleOptions } from './context.js';
 import { DEFAULT_EXTRACTORS, type Extractor } from './extractors.js';
-import type { Article, ArticleKind } from './types.js';
+import type { Article, ArticleKind, Example, Media, Sense } from './types.js';
 
 /**
  * Version of the article format: `Article` and the types it is made of. Experimental: a
@@ -31,13 +31,20 @@ export const ARTICLE_VERSION = '1.0.0';
  *
  * @experimental
  */
-export interface ArticleOptions {
+export interface ArticlePluginOptions {
   /**
-   * `expand` (the default) gives each label its `expansion` from the dictionary's
-   * abbreviations, when there are some; `keep` leaves labels as written.
+   * Include the labels (`[p]`): `Article.labels`, `Sense.labels`, `Example.labels` and
+   * `Media.label`. Default `true`. Left out, labels are still recognized, so that their text
+   * never ends up in translations or notes; the arrays are then empty.
    */
-  readonly labels?: 'expand' | 'keep';
-  /** How `[']` stresses are rendered in texts; see `PlainTextOptions.stress`. Default `none`. */
+  readonly labels?: boolean;
+  /**
+   * Give each label its `expansion` from the dictionary's abbreviations
+   * (`DictionaryContext.abbreviations`), when there are some. Default `true`: an expansion
+   * is added next to the label as written, which is always kept.
+   */
+  readonly expandLabels?: boolean;
+  /** How `[']` stresses are rendered in texts; see `ToPlainTextOptions.stress`. Default `none`. */
   readonly stress?: 'none' | 'combining';
   /**
    * Include the secondary content of `[*]` (shown by Lingvo in the full view only), where
@@ -61,6 +68,11 @@ export interface ArticleOptions {
 export interface ArticlePluginConfig {
   /** The plugin name. Default `article`; give another to tell a customized plugin apart. */
   readonly name?: string;
+  /**
+   * The version of the plugin's output format, recorded with exports. Default
+   * `ARTICLE_VERSION`; a customized plugin whose output differs should have its own.
+   */
+  readonly version?: string;
   /** Picks the extractor of each entry and sub-entry. Default `classifyBody`. */
   readonly classify?: Classifier;
   /**
@@ -70,8 +82,15 @@ export interface ArticlePluginConfig {
   readonly extractors?: Readonly<Record<string, Extractor>>;
 }
 
-const OPTION_KEYS = new Set(['labels', 'stress', 'secondary', 'splitTranslations', 'kind']);
-const CONFIG_KEYS = new Set(['name', 'classify', 'extractors']);
+const OPTION_KEYS = new Set([
+  'labels',
+  'expandLabels',
+  'stress',
+  'secondary',
+  'splitTranslations',
+  'kind',
+]);
+const CONFIG_KEYS = new Set(['name', 'version', 'classify', 'extractors']);
 
 /**
  * Makes an `article` plugin, with a classifier and extractors of your own if need be.
@@ -88,6 +107,7 @@ const CONFIG_KEYS = new Set(['name', 'classify', 'extractors']);
  *
  * const myArticle = createArticlePlugin({
  *   name: 'my-article',
+ *   version: '1.0.0',
  *   extractors: {
  *     // Starts from the built-in reading and drops the notes.
  *     'my-family': (body, context) => ({ ...extractZoneMarked(body, context), notes: [] }),
@@ -103,13 +123,18 @@ const CONFIG_KEYS = new Set(['name', 'classify', 'extractors']);
  */
 export function createArticlePlugin(
   config: ArticlePluginConfig = {},
-): DslPlugin<Article, ArticleOptions | undefined> {
-  const { name = 'article', classify = classifyBody, extractors = {} } = checkConfig(config);
+): DslPlugin<Article, ArticlePluginOptions | undefined> {
+  const {
+    name = 'article',
+    version = ARTICLE_VERSION,
+    classify = classifyBody,
+    extractors = {},
+  } = checkConfig(config);
   const table: Readonly<Record<string, Extractor>> = { ...DEFAULT_EXTRACTORS, ...extractors };
   return definePlugin({
     name,
-    version: ARTICLE_VERSION,
-    setup(dictionary, options: ArticleOptions | undefined) {
+    version,
+    setup(dictionary, options: ArticlePluginOptions | undefined) {
       const { kind: forced, ...resolved } = checkOptions(options, table);
       return (entry): Article => {
         const tilde = entry.headwords[0]?.variants[0];
@@ -118,7 +143,7 @@ export function createArticlePlugin(
           const kind = forced ?? classify(body, context);
           const extractor = table[kind];
           if (typeof extractor !== 'function') {
-            throw DslError.of('invalidArgument', `The article plugin has no extractor ${kind}.`);
+            throw new DslError('DSL0001', `The article plugin has no extractor ${kind}.`);
           }
           const { notes, ...content } = extractor(body, context);
           const article: { -readonly [K in keyof Article]: Article[K] } = {
@@ -128,12 +153,30 @@ export function createArticlePlugin(
             subentries: subentriesOf(body).map((s) => read(s.children, s.headwords)),
           };
           if (notes !== undefined && notes.length > 0) article.notes = notes;
-          return article;
+          return resolved.labels ? article : withoutLabels(article);
         };
         return read(entry.body, entry.headwords);
       };
     },
   });
+}
+
+/** An article without labels: the `labels` option is off. Sub-entries are already done. */
+function withoutLabels(article: Article): Article {
+  const sense = (s: Sense): Sense => ({
+    ...s,
+    labels: [],
+    examples: s.examples.map(example),
+    senses: s.senses.map(sense),
+  });
+  const example = ({ labels: _labels, ...rest }: Example): Example => rest;
+  const media = ({ label: _label, ...rest }: Media): Media => rest;
+  return {
+    ...article,
+    media: article.media.map(media),
+    labels: [],
+    senses: article.senses.map(sense),
+  };
 }
 
 /** The sub-entries of a body, wherever they are. */
@@ -149,24 +192,24 @@ function subentriesOf(body: readonly MarkupNode[]): SubentryNode[] {
 
 function checkConfig(config: ArticlePluginConfig): ArticlePluginConfig {
   if (typeof config !== 'object' || config === null) {
-    throw DslError.of('invalidArgument', 'The article plugin configuration must be an object.');
+    throw new DslError('DSL0001', 'The article plugin configuration must be an object.');
   }
   for (const key of Object.keys(config)) {
     if (!CONFIG_KEYS.has(key)) {
-      throw DslError.of('invalidArgument', `The article plugin has no configuration ${key}.`);
+      throw new DslError('DSL0001', `The article plugin has no configuration ${key}.`);
     }
   }
   const { classify, extractors } = config;
   if (classify !== undefined && typeof classify !== 'function') {
-    throw DslError.of('invalidArgument', 'The classify option must be a function.');
+    throw new DslError('DSL0001', 'The classify option must be a function.');
   }
   if (extractors !== undefined) {
     if (typeof extractors !== 'object' || extractors === null) {
-      throw DslError.of('invalidArgument', 'The extractors option must be an object.');
+      throw new DslError('DSL0001', 'The extractors option must be an object.');
     }
     for (const [kind, extractor] of Object.entries(extractors)) {
       if (typeof extractor !== 'function') {
-        throw DslError.of('invalidArgument', `The extractor ${kind} must be a function.`);
+        throw new DslError('DSL0001', `The extractor ${kind} must be a function.`);
       }
     }
   }
@@ -174,40 +217,38 @@ function checkConfig(config: ArticlePluginConfig): ArticlePluginConfig {
 }
 
 function checkOptions(
-  options: ArticleOptions | undefined,
+  options: ArticlePluginOptions | undefined,
   extractors: Readonly<Record<string, Extractor>>,
 ): ResolvedArticleOptions & { readonly kind?: string } {
   if (options !== undefined && (typeof options !== 'object' || options === null)) {
-    throw DslError.of('invalidArgument', 'The article options must be an object.');
+    throw new DslError('DSL0001', 'The article options must be an object.');
   }
   for (const key of Object.keys(options ?? {})) {
     if (!OPTION_KEYS.has(key)) {
-      throw DslError.of('invalidArgument', `The article plugin has no option ${key}.`);
+      throw new DslError('DSL0001', `The article plugin has no option ${key}.`);
     }
   }
   const {
-    labels = 'expand',
+    labels = true,
+    expandLabels = true,
     stress = 'none',
     secondary = true,
     splitTranslations = true,
     kind,
   } = options ?? {};
-  if (labels !== 'expand' && labels !== 'keep') {
-    throw DslError.of('invalidArgument', 'The labels option must be "expand" or "keep".');
+  if (typeof labels !== 'boolean' || typeof expandLabels !== 'boolean') {
+    throw new DslError('DSL0001', 'The labels and expandLabels options must be booleans.');
   }
   if (stress !== 'none' && stress !== 'combining') {
-    throw DslError.of('invalidArgument', 'The stress option must be "none" or "combining".');
+    throw new DslError('DSL0001', 'The stress option must be "none" or "combining".');
   }
   if (typeof secondary !== 'boolean' || typeof splitTranslations !== 'boolean') {
-    throw DslError.of(
-      'invalidArgument',
-      'The secondary and splitTranslations options must be booleans.',
-    );
+    throw new DslError('DSL0001', 'The secondary and splitTranslations options must be booleans.');
   }
   if (kind !== undefined && typeof extractors[kind] !== 'function') {
-    throw DslError.of('invalidArgument', `The article plugin has no extractor ${kind}.`);
+    throw new DslError('DSL0001', `The article plugin has no extractor ${kind}.`);
   }
-  const resolved = { labels, stress, secondary, splitTranslations };
+  const resolved = { labels, expandLabels, stress, secondary, splitTranslations };
   return kind === undefined ? resolved : { ...resolved, kind };
 }
 
@@ -226,4 +267,4 @@ function checkOptions(
  *
  * @experimental
  */
-export const article: DslPlugin<Article, ArticleOptions | undefined> = createArticlePlugin();
+export const article: DslPlugin<Article, ArticlePluginOptions | undefined> = createArticlePlugin();

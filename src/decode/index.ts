@@ -7,9 +7,9 @@
 
 export type { EncodingDecision, EncodingSource } from './byte-decoder.js';
 export {
+  type DecodeDslOptions,
   type DecodedText,
   type DecodeInfo,
-  type DecodeOptions,
   decodeDsl,
 } from './decode.js';
 export type { DecompressMode } from './gzip.js';

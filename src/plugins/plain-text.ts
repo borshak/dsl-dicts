@@ -4,37 +4,33 @@
  * @packageDocumentation
  */
 
-import { DslError, definePlugin, type PlainTextOptions, toPlainText } from '../index.js';
+import { DslError, definePlugin, type ToPlainTextOptions, toPlainText } from '../index.js';
 
-/**
- * Output of the `plain-text` plugin. JSON-serializable.
- *
- * @experimental
- */
+/** Output of the `plain-text` plugin. JSON-serializable. */
 export interface PlainTextResult {
   /** The display text of each headword (`Headword.text`), in order. */
-  readonly headwords: string[];
+  readonly headwords: readonly string[];
   /** The body as plain text; see `toPlainText`. */
   readonly text: string;
 }
 
 /**
- * Options of the `plain-text` plugin: those of `toPlainText` that are not about the entry,
- * plus `expandLabels`.
- *
- * @experimental
+ * Options of the `plain-text` plugin: those of `toPlainText` that are not about the entry.
+ * `expandLabels` expands labels with the dictionary's abbreviations
+ * (`DictionaryContext.abbreviations`), when they were read.
  */
 export interface PlainTextPluginOptions
   extends Pick<
-    PlainTextOptions,
-    'indent' | 'secondary' | 'media' | 'unindexed' | 'labels' | 'subentries' | 'stress'
-  > {
-  /**
-   * Replace `[p]` labels by their expansion from `DictionaryContext.abbreviations`, when the
-   * dictionary's abbreviations were read. Default `false`.
-   */
-  readonly expandLabels?: boolean;
-}
+    ToPlainTextOptions,
+    | 'indent'
+    | 'secondary'
+    | 'media'
+    | 'unindexed'
+    | 'labels'
+    | 'expandLabels'
+    | 'subentries'
+    | 'stress'
+  > {}
 
 const KEYS = new Set([
   'indent',
@@ -56,17 +52,14 @@ const KEYS = new Set([
  * ```ts
  * for await (const { headwords, text } of parseDsl(bytes).entries({ plugin: plainText })) …
  * ```
- *
- * @experimental
  */
 export const plainText = definePlugin({
   name: 'plain-text',
   version: '1.0.0',
   setup(context, options: PlainTextPluginOptions | undefined) {
-    const { expandLabels = false, ...rest } = checkOptions(options);
-    const render: PlainTextOptions = {
-      ...rest,
-      abbreviations: expandLabels ? context.abbreviations : undefined,
+    const render: ToPlainTextOptions = {
+      ...checkOptions(options),
+      abbreviations: context.abbreviations,
     };
     return (entry): PlainTextResult => ({
       headwords: entry.headwords.map((headword) => headword.text),
@@ -78,15 +71,15 @@ export const plainText = definePlugin({
 function checkOptions(options: PlainTextPluginOptions | undefined): PlainTextPluginOptions {
   if (options === undefined) return {};
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'The plain-text options must be an object.');
+    throw new DslError('DSL0001', 'The plain-text options must be an object.');
   }
   for (const key of Object.keys(options)) {
     if (!KEYS.has(key)) {
-      throw DslError.of('invalidArgument', `The plain-text plugin has no option ${key}.`);
+      throw new DslError('DSL0001', `The plain-text plugin has no option ${key}.`);
     }
   }
   if (options.stress !== undefined && options.stress !== 'none' && options.stress !== 'combining') {
-    throw DslError.of('invalidArgument', 'The stress option must be "none" or "combining".');
+    throw new DslError('DSL0001', 'The stress option must be "none" or "combining".');
   }
   return options;
 }

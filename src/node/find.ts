@@ -7,13 +7,11 @@
 import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DslError } from '../index.js';
+import { dslError } from '../diagnostics/index.js';
 import { dictionaryBaseName, isAbbreviationsName, isDictionaryName } from './names.js';
 
 /**
  * Options of {@link findDictionaries}.
- *
- * @experimental
  */
 export interface FindDictionariesOptions {
   /** Look in subdirectories too. Default `false`. Symbolic links to directories are not followed. */
@@ -33,21 +31,20 @@ export interface FindDictionariesOptions {
  * subdirectories, which are visited in name order.
  * @throws DslError `DSL0001` for invalid arguments; `DSL1001` if `directory` cannot be read.
  * Subdirectories that cannot be read are skipped.
- * @experimental
  */
 export async function findDictionaries(
   directory: string,
   options: FindDictionariesOptions = {},
 ): Promise<string[]> {
   if (typeof directory !== 'string' || directory.length === 0) {
-    throw DslError.of('invalidArgument', 'The directory must be a non-empty string.');
+    throw dslError('invalidArgument', 'The directory must be a non-empty string.');
   }
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
+    throw dslError('invalidArgument', 'Options must be an object.');
   }
   const { recursive = false } = options;
   if (typeof recursive !== 'boolean') {
-    throw DslError.of('invalidArgument', 'The recursive option must be a boolean.');
+    throw dslError('invalidArgument', 'The recursive option must be a boolean.');
   }
   const found: string[] = [];
   await walk(directory, recursive, found, true);
@@ -64,7 +61,7 @@ async function walk(
   try {
     entries = await readdir(directory, { withFileTypes: true });
   } catch (error) {
-    if (root) throw DslError.of('readFailed', `Cannot read the directory ${directory}.`, error);
+    if (root) throw dslError('readFailed', `Cannot read the directory ${directory}.`, error);
     return;
   }
   entries.sort((a, b) => compare(a.name, b.name));

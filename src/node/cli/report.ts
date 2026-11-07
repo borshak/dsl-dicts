@@ -5,21 +5,16 @@
  */
 
 import type { Writable } from 'node:stream';
-import {
-  createDiagnosticTally,
-  type Diagnostic,
-  type DiagnosticSink,
-  type DiagnosticTally,
-} from '../../index.js';
+import type { Diagnostic, DiagnosticCounts, DiagnosticSink } from '../../index.js';
+import type { Verbosity } from './options.js';
 
-/** How much of the diagnostics is printed. */
-export type Verbosity = 'quiet' | 'summary' | 'verbose';
-
-/** A tally that also prints diagnostics as they are reported, when verbose. */
+/** A sink that prints diagnostics as they are reported, when verbose. */
 export interface Reporter extends DiagnosticSink {
-  readonly tally: DiagnosticTally;
-  /** Prints the summary line of the file, unless quiet or verbose or there is nothing. */
-  finish(): void;
+  /**
+   * Prints the summary line of the file, from the counts of the dictionary: unless quiet or
+   * verbose, or there is nothing to report.
+   */
+  finish(counts: DiagnosticCounts | undefined): void;
 }
 
 /** One diagnostic as a line: `file:line:column: severity CODE message`. */
@@ -38,18 +33,15 @@ export function formatCounts(counts: Readonly<Record<string, number>>): string {
 
 /** Creates the reporter of the diagnostics of one file. */
 export function createReporter(file: string, stderr: Writable, verbosity: Verbosity): Reporter {
-  const tally = createDiagnosticTally();
   return {
-    tally,
     report(diagnostic) {
-      tally.report(diagnostic);
       if (verbosity === 'verbose') stderr.write(`${formatDiagnostic(file, diagnostic)}\n`);
     },
-    finish() {
-      if (verbosity !== 'summary' || tally.total === 0) return;
-      const noun = tally.total === 1 ? 'diagnostic' : 'diagnostics';
+    finish(counts) {
+      if (verbosity !== 'summary' || counts === undefined || counts.total === 0) return;
+      const noun = counts.total === 1 ? 'diagnostic' : 'diagnostics';
       stderr.write(
-        `${file}: ${tally.total} ${noun} (${formatCounts(tally.byCode)}); use --verbose to list them\n`,
+        `${file}: ${counts.total} ${noun} (${formatCounts(counts.byCode)}); use --verbose to list them\n`,
       );
     },
   };

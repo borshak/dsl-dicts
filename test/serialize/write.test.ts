@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { article } from '../../src/article/index.js';
 import {
   AST_VERSION,
-  createDiagnosticTally,
+  createCollectingSink,
+  createPluginDiagnostic,
   type DslEntry,
   type DslPlugin,
   definePlugin,
@@ -66,7 +67,7 @@ describe('toJsonl', () => {
     expect(records(lines)).toHaveLength(3);
     const bad = toJsonl(dictOf(TEXT), { plugin: plainText, options: { bogus: 1 } as never });
     expect(await collect(bad).catch((e: unknown) => e)).toMatchObject({
-      code: 'DSL5001',
+      code: 'DSL0001',
       plugin: 'plain-text',
     });
   });
@@ -110,32 +111,39 @@ describe('toJsonl', () => {
     expect(summary.diagnostics).toEqual({ DSL2001: 3 });
   });
 
-  it('counts with a tally: every diagnostic, those of plugin entries too', async () => {
-    const tally = createDiagnosticTally();
-    const dict = parseDsl(NOISY, { diagnostics: tally });
-    const summary = records(
-      await collect(toJsonl(dict, { plugin: plainText, summary: true, tally })),
-    ).at(-1);
+  it('counts every diagnostic with a plugin too, those the plugin reports included', async () => {
+    const sink = createCollectingSink();
+    const dict = parseDsl(NOISY, { diagnostics: sink });
+    const summary = records(await collect(toJsonl(dict, { plugin: plainText, summary: true }))).at(
+      -1,
+    );
     expect(summary).toEqual({
       type: 'summary',
       entries: 3,
       diagnostics: { DSL4101: 1, DSL4202: 1 },
     });
-    expect(tally.total).toBe(2);
-    expect(tally.bySeverity).toEqual({ error: 0, warning: 2, info: 0 });
+    expect(sink.diagnostics).toHaveLength(2);
+    const reporting = definePlugin({
+      name: 'reporting',
+      version: '1.0.0',
+      setup: (context) => (entry) => {
+        context.diagnostics.report(
+          createPluginDiagnostic('reporting', 'seen', { code: 'reporting/seen' }),
+        );
+        return entry.headwords.length;
+      },
+    });
+    const counted = records(
+      await collect(toJsonl(dictOf(NOISY), { plugin: reporting, summary: true })),
+    ).at(-1);
+    expect(counted.diagnostics).toEqual({ DSL4101: 1, DSL4202: 1, 'reporting/seen': 3 });
   });
 
-  it('does not count twice when the tally is also the dictionary sink', async () => {
-    const tally = createDiagnosticTally();
-    const dict = parseDsl('a\n\tb\n', { diagnostics: tally });
-    const summary = records(await collect(toJsonl(dict, { summary: true, tally }))).at(-1);
-    expect(summary.diagnostics).toEqual({ DSL2001: 3 });
-  });
-
-  it('refuses a summary with a plugin and no tally', () => {
-    expect(() => toJsonl(dictOf(TEXT), { plugin: plainText, summary: true })).toThrow(
-      expect.objectContaining({ code: 'DSL0001' }),
-    );
+  it('refuses a dictionary with raw bodies', () => {
+    const raw = parseDsl(TEXT, { body: 'raw' });
+    for (const call of [() => toJsonl(raw as never), () => toJson(raw as never)]) {
+      expect(call).toThrow(expect.objectContaining({ code: 'DSL0001' }));
+    }
   });
 
   it('has no summary unless requested, and an empty dictionary has only a header', async () => {
@@ -208,6 +216,29 @@ describe('toJsonl', () => {
     expect(await collect(out).catch((e: unknown) => e)).toMatchObject({ code: 'DSL0002' });
   });
 
+  it('types the plugin and its options like entries()', () => {
+    const needs = definePlugin({
+      name: 'needs',
+      version: '1.0.0',
+      setup: (_context, options: { readonly separator: string }) => (entry) =>
+        entry.headwords.map((h) => h.text).join(options.separator),
+    });
+    const dict = dictOf(TEXT);
+    // Not called: the checks are of the types.
+    void (() => {
+      // @ts-expect-error The plugin requires options.
+      toJsonl(dict, { plugin: needs });
+      // @ts-expect-error The plugin has no such option.
+      toJsonl(dict, { plugin: plainText, options: { bogus: 1 } });
+      // @ts-expect-error The options need a plugin.
+      toJson(dict, { options: { separator: ',' } });
+      toJsonl(dict, { plugin: needs, options: { separator: ',' }, summary: true });
+      toJson(dict, { plugin: plainText, pretty: true });
+      toJsonl(dict, { summary: true });
+    });
+    expect(needs.name).toBe('needs');
+  });
+
   it('validates its arguments synchronously', () => {
     const dict = dictOf(TEXT);
     for (const call of [
@@ -215,7 +246,7 @@ describe('toJsonl', () => {
       () => toJsonl(dict, null as never),
       () => toJsonl(dict, { summary: 1 as never }),
       () => toJsonl(dict, { plugin: {} as never }),
-      () => toJsonl(dict, { tally: {} as never }),
+      () => toJsonl({ ...dict, entries: dict.entries } as never),
       () => toJson(dict, { pretty: 'yes' as never }),
     ]) {
       expect(call).toThrow(expect.objectContaining({ code: 'DSL0001' }));
@@ -299,7 +330,13 @@ function fake(entries: readonly unknown[]) {
   return {
     header: Promise.resolve(header),
     info: Promise.resolve(info),
+    bodyMode: 'ast',
     diagnostics: [],
+    diagnosticCounts: () => ({
+      total: 0,
+      byCode: {},
+      bySeverity: { error: 0, warning: 0, info: 0 },
+    }),
     entries: () =>
       (async function* () {
         yield* entries;

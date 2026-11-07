@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { type DecodeOptions, DslError, decodeDsl } from '../../src/index.js';
+import { type DecodeDslOptions, DslError, decodeDsl } from '../../src/index.js';
 import {
   type Card,
   CODE_PAGE_SAMPLES,
@@ -258,7 +258,7 @@ describe('stale directives', () => {
 });
 
 describe('forced encoding', () => {
-  const cases: [string, Uint8Array, DecodeOptions, string, string[]][] = [
+  const cases: [string, Uint8Array, DecodeDslOptions, string, string[]][] = [
     [
       'UTF-16LE with matching BOM',
       encode(unicode, 'utf-16le', true),
@@ -329,7 +329,7 @@ describe('forced encoding', () => {
   });
 
   it('throws synchronously for invalid options', () => {
-    const invalid: DecodeOptions[] = [
+    const invalid: DecodeDslOptions[] = [
       { encoding: '' },
       { defaultEncoding: 'nope' },
       { defaultEncoding: 'utf-16le' },

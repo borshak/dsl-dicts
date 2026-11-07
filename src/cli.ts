@@ -18,8 +18,9 @@ runCli(process.argv.slice(2), {
   (code) => {
     process.exitCode = code;
   },
+  // runCli reports its errors itself: this is a bug.
   (error: unknown) => {
-    console.error(error);
-    process.exitCode = 2;
+    console.error('dsl-dicts: internal error, please report it:', error);
+    process.exitCode = 70;
   },
 );

@@ -30,12 +30,41 @@ describe('labels', () => {
     expect(a.senses).toEqual([sense({ translations: ['a'] })]);
   });
 
-  it("keep their text only with labels: 'keep', or without abbreviations", async () => {
+  it('keep their text only with expandLabels: false, or without abbreviations', async () => {
     const text = entry('[p]n[/p]', '[m1][trn]a[/trn][/m]');
-    expect((await articleOf(text, { labels: 'keep' }, { abbreviations })).labels).toEqual([
+    expect((await articleOf(text, { expandLabels: false }, { abbreviations })).labels).toEqual([
       { text: 'n' },
     ]);
     expect((await articleOf(text)).labels).toEqual([{ text: 'n' }]);
+  });
+
+  it('are left out with labels: false, still recognized', async () => {
+    const text = entry(
+      '[p]n[/p] [p]брит.[/p] [s]a.wav[/s]',
+      '[m1]1) [p]разг.[/p] [trn]a[/trn][/m]',
+      '[m2][ex][lang id=1033]x[/lang] — [p]посл.[/p] y[/ex][/m]',
+      '@ ~ sub',
+      '[m1][p]n[/p] [trn]b[/trn][/m]',
+      '@',
+    );
+    const full = await articleOf(text, undefined, { abbreviations });
+    const bare = await articleOf(text, { labels: false }, { abbreviations });
+    expect(full.labels.length).toBeGreaterThan(0);
+    expect(bare.labels).toEqual([]);
+    expect(bare.media).toEqual([{ file: 'a.wav', type: 'sound' }]);
+    expect(bare.senses[0]?.labels).toEqual([]);
+    expect(bare.senses[0]?.translations).toEqual(full.senses[0]?.translations);
+    expect(bare.senses[0]?.examples).toEqual([
+      { source: { text: 'x', language: 'English' }, target: { text: 'y', language: 'Russian' } },
+    ]);
+    expect(bare.subentries[0]?.senses[0]?.labels).toEqual([]);
+    expect(bare.subentries[0]?.senses[0]?.translations).toEqual(['b']);
+    // Nothing but the labels differs.
+    const strip = (value: unknown): unknown =>
+      JSON.parse(JSON.stringify(value), (key, v) =>
+        key === 'labels' && Array.isArray(v) ? undefined : key === 'label' ? undefined : v,
+      );
+    expect(strip(bare)).toEqual(strip(full));
   });
 
   it('of examples and media are expanded too', async () => {

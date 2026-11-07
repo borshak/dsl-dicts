@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { type DiagnosticSink, DslError, type SourcePosition } from '../diagnostics/index.js';
+import { type DiagnosticSink, dslError, type SourcePosition } from '../diagnostics/index.js';
 import { buildHeadword } from '../headword/parse.js';
 import { type BodyLine, type LineSegment, positionInLine, type RawLine } from '../segment/index.js';
 import type { Headword, MarkupNode } from './ast.js';
@@ -12,12 +12,8 @@ import { TreeBuilder } from './builder.js';
 import { type OrderedSink, orderedSink, reporter } from './report.js';
 import { type Token, Tokenizer, token } from './tokenizer.js';
 
-/**
- * Options of {@link parseMarkup} and {@link parseBody}.
- *
- * @experimental
- */
-export interface MarkupOptions {
+/** Options of {@link parseBody}, and the common options of {@link parseMarkup}. */
+export interface ParseBodyOptions {
   /**
    * Add `position` and `end` to every node. Default `true`. Switch it off to save memory and
    * time when positions are not needed; diagnostics keep their positions either way.
@@ -30,12 +26,8 @@ export interface MarkupOptions {
   readonly diagnostics?: DiagnosticSink;
 }
 
-/**
- * Options of {@link parseMarkup}.
- *
- * @experimental
- */
-export interface ParseMarkupOptions extends MarkupOptions {
+/** Options of {@link parseMarkup}. */
+export interface ParseMarkupOptions extends ParseBodyOptions {
   /**
    * Source position of the first character of a string input, for node and diagnostic
    * positions. Default: offset 0, line 1, column 1. Ignored for a `RawLine` input, which
@@ -59,7 +51,6 @@ const ORIGIN: SourcePosition = { offset: 0, line: 1, column: 1 };
  * arguments or from a strict diagnostic sink.
  *
  * @param input - The markup, or a line from the segmenter (its positions are used).
- * @experimental
  */
 export function parseMarkup(
   input: string | RawLine,
@@ -72,7 +63,7 @@ export function parseMarkup(
   } else if (typeof input === 'object' && input !== null && typeof input.text === 'string') {
     lines = [input];
   } else {
-    throw DslError.of('invalidArgument', 'The input must be a string or a RawLine.');
+    throw dslError('invalidArgument', 'The input must be a string or a RawLine.');
   }
   return parseLines(lines, options);
 }
@@ -108,17 +99,15 @@ export function parseMarkup(
  *   closed at the end; text-only tags (`[t]`, `[s]`, `[ref]`, ...) and `<<>>` links keep
  *   their content as text; unknown tags are kept as tags only if they are closed;
  * - malformed markup is kept as text. Every recovery is reported.
- *
- * @experimental
  */
-export function parseBody(entry: BodyInput, options: MarkupOptions = {}): MarkupNode[] {
+export function parseBody(entry: BodyInput, options: ParseBodyOptions = {}): MarkupNode[] {
   checkOptions(options);
   if (typeof entry !== 'object' || entry === null || !Array.isArray(entry.body)) {
-    throw DslError.of('invalidArgument', 'The entry must have a body array.');
+    throw dslError('invalidArgument', 'The entry must have a body array.');
   }
   const parents = entry.headwords;
   if (parents !== undefined && !Array.isArray(parents)) {
-    throw DslError.of('invalidArgument', 'The headwords of the entry must be an array.');
+    throw dslError('invalidArgument', 'The headwords of the entry must be an array.');
   }
   const lines = entry.body;
   const sink = orderedSink(options.diagnostics);
@@ -178,12 +167,17 @@ export function parseBody(entry: BodyInput, options: MarkupOptions = {}): Markup
 
 /**
  * The entry argument of {@link parseBody}: the body lines, and optionally the entry's
- * headwords, raw or parsed, for `~` in sub-entry headwords.
- *
- * @experimental
+ * headwords, raw or parsed, for `~` in sub-entry headwords. A `RawEntry` of `segmentDsl` and
+ * a `DslEntry` of `parseDsl` in `raw` mode are both one.
  */
 export interface BodyInput {
+  /** The body lines, as the segmenter makes them (`RawEntry.body`). */
   readonly body: readonly BodyLine[];
+  /**
+   * The headwords of the entry: lines of the segmenter (`RawEntry.headwords`) or parsed
+   * headwords (`DslEntry.headwords`). Only the first is used: a `~` in a sub-entry headword
+   * stands for its first index form. Without them, such a `~` is kept as text (`DSL3102`).
+   */
   readonly headwords?: readonly (RawLine | Headword)[];
 }
 
@@ -205,7 +199,7 @@ function tildeOf(headwords: readonly (RawLine | Headword)[] | undefined): string
 }
 
 /** Parses lines of markup. Internal. */
-export function parseLines(lines: readonly RawLine[], options: MarkupOptions): MarkupNode[] {
+export function parseLines(lines: readonly RawLine[], options: ParseBodyOptions): MarkupNode[] {
   const sink = orderedSink(options.diagnostics);
   const tokens: Token[] = [];
   const tokenizer = new Tokenizer(tokens, reporter(lines, sink));
@@ -224,7 +218,7 @@ function noHeadword(): Headword {
 function build(
   lines: readonly RawLine[],
   tokens: readonly Token[],
-  options: MarkupOptions,
+  options: ParseBodyOptions,
   sink: OrderedSink | undefined,
   headword: (line: RawLine) => Headword,
 ): MarkupNode[] {
@@ -237,9 +231,9 @@ function build(
   return nodes;
 }
 
-function checkOptions(options: MarkupOptions): void {
+function checkOptions(options: ParseBodyOptions): void {
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
+    throw dslError('invalidArgument', 'Options must be an object.');
   }
 }
 

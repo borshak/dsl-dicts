@@ -5,16 +5,12 @@
  * @packageDocumentation
  */
 
-import { DslError } from '../diagnostics/index.js';
+import { dslError } from '../diagnostics/index.js';
 import type { Headword, MarkupNode, TagNode } from '../markup/ast.js';
 import { flipCase } from '../markup/tokenizer.js';
 
-/**
- * Options of {@link toPlainText} and {@link zoneText}.
- *
- * @experimental
- */
-export interface PlainTextOptions {
+/** Options of {@link toPlainText}, and the common options of {@link zoneText}. */
+export interface ToPlainTextOptions {
   /**
    * The entry's headwords, for `~`: it stands for the first index form of the first headword
    * (`headwords[0].variants[0]`, as in sub-entry headwords), `^~` for the same with the case
@@ -40,9 +36,14 @@ export interface PlainTextOptions {
   /** Include `[p]` labels. Default `true` in {@link toPlainText}, `false` in {@link zoneText}. */
   readonly labels?: boolean;
   /**
-   * Expansions of `[p]` labels, such as `DictionaryContext.abbreviations`: a label whose
-   * text, normalized with {@link normalizeLabel}, is a key is replaced by its value. Labels
-   * not in the map are kept as written. Keys must be normalized too, as those of
+   * Replace each included label by its expansion from `abbreviations`: a label whose text,
+   * normalized with {@link normalizeLabel}, is a key there. Labels not in the map are kept as
+   * written. Default `false`.
+   */
+  readonly expandLabels?: boolean;
+  /**
+   * The expansions of `[p]` labels, for `expandLabels`, such as
+   * `DictionaryContext.abbreviations`. Keys must be normalized, as those of
    * `parseAbbreviations` are.
    */
   readonly abbreviations?: ReadonlyMap<string, string>;
@@ -61,6 +62,15 @@ export interface PlainTextOptions {
 }
 
 /**
+ * Options of {@link zoneText}: those of {@link toPlainText} but `unindexed` (zones never
+ * include `[!trs]`) and `indent` (a zone is one line), plus the zones.
+ */
+export interface ZoneTextOptions extends Omit<ToPlainTextOptions, 'unindexed' | 'indent'> {
+  /** The tags whose content is wanted. Default {@link SEARCH_ZONES}. */
+  readonly zones?: readonly string[];
+}
+
+/**
  * Normalizes the text of a label, so that `[p]` labels and the headwords of `_abrv.dsl` can be
  * compared: every run of whitespace (Unicode `\s`, a non-breaking space included) becomes one
  * space, and leading and trailing whitespace is removed. Case is kept.
@@ -74,18 +84,15 @@ export interface PlainTextOptions {
  * ```
  *
  * @throws DslError `DSL0001` if `text` is not a string.
- * @experimental
  */
 export function normalizeLabel(text: string): string {
-  if (typeof text !== 'string') throw DslError.of('invalidArgument', 'The label must be a string.');
+  if (typeof text !== 'string') throw dslError('invalidArgument', 'The label must be a string.');
   return text.replace(/\s+/g, ' ').trim();
 }
 
 /**
  * The search zones of DSL, in the order of the manual: translations (`[trn]`, and `[trn1]`,
  * which the compiler generates), examples (`[ex]`) and comments (`[com]`).
- *
- * @experimental
  */
 export const SEARCH_ZONES: readonly string[] = Object.freeze(['trn', 'trn1', 'ex', 'com']);
 
@@ -119,9 +126,11 @@ interface Settings {
  * Pure: never mutates the nodes; works on deeply frozen trees.
  *
  * @throws DslError `DSL0001` for arguments of the wrong type.
- * @experimental
  */
-export function toPlainText(nodes: readonly MarkupNode[], options: PlainTextOptions = {}): string {
+export function toPlainText(
+  nodes: readonly MarkupNode[],
+  options: ToPlainTextOptions = {},
+): string {
   checkNodes(nodes);
   const writer = new Writer();
   render(nodes, writer, settings(options, true, true));
@@ -136,19 +145,23 @@ export function toPlainText(nodes: readonly MarkupNode[], options: PlainTextOpti
  * {@link toPlainText} with all whitespace, line breaks included, collapsed to one space;
  * empty zones are left out.
  *
+ * @example
+ * ```ts
+ * zoneText(entry.body, { zones: ['trn'], headwords: entry.headwords });
+ * ```
+ *
  * @returns The lines, joined with `\n`; empty if there are no zones or they are empty.
  * @throws DslError `DSL0001` for arguments of the wrong type.
- * @experimental
  */
-export function zoneText(
-  nodes: readonly MarkupNode[],
-  zones: readonly string[] = SEARCH_ZONES,
-  options: PlainTextOptions = {},
-): string {
+export function zoneText(nodes: readonly MarkupNode[], options: ZoneTextOptions = {}): string {
   checkNodes(nodes);
-  if (!Array.isArray(zones)) throw DslError.of('invalidArgument', 'The zones must be an array.');
+  if (typeof options !== 'object' || options === null) {
+    throw dslError('invalidArgument', 'Options must be an object.');
+  }
+  const { zones = SEARCH_ZONES, ...rest } = options;
+  if (!Array.isArray(zones)) throw dslError('invalidArgument', 'The zones must be an array.');
   const names = new Set(zones);
-  const base = settings(options, false, false);
+  const base = settings(rest, false, false);
   const zone: Settings = { ...base, unindexed: false, indent: '' };
   const lines: string[] = [];
   const visit = (list: readonly MarkupNode[]): void => {
@@ -175,8 +188,6 @@ export function zoneText(
 /**
  * Tells whether markup nodes contain a search zone: a tag named in `zones` (by default
  * {@link SEARCH_ZONES}), at any depth, sub-entries included.
- *
- * @experimental
  */
 export function hasZones(
   nodes: readonly MarkupNode[],
@@ -195,30 +206,34 @@ export function hasZones(
 
 function checkNodes(nodes: unknown): void {
   if (!Array.isArray(nodes)) {
-    throw DslError.of('invalidArgument', 'The nodes must be an array of markup nodes.');
+    throw dslError('invalidArgument', 'The nodes must be an array of markup nodes.');
   }
 }
 
-function settings(options: PlainTextOptions, unindexed: boolean, labels: boolean): Settings {
+function settings(options: ToPlainTextOptions, unindexed: boolean, labels: boolean): Settings {
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
+    throw dslError('invalidArgument', 'Options must be an object.');
   }
   const { headwords, tilde, indent = '', abbreviations } = options;
   if (tilde !== undefined && typeof tilde !== 'string') {
-    throw DslError.of('invalidArgument', 'The tilde option must be a string.');
+    throw dslError('invalidArgument', 'The tilde option must be a string.');
   }
   if (headwords !== undefined && !Array.isArray(headwords)) {
-    throw DslError.of('invalidArgument', 'The headwords option must be an array.');
+    throw dslError('invalidArgument', 'The headwords option must be an array.');
   }
   if (typeof indent !== 'string') {
-    throw DslError.of('invalidArgument', 'The indent option must be a string.');
+    throw dslError('invalidArgument', 'The indent option must be a string.');
   }
   if (abbreviations !== undefined && typeof abbreviations?.get !== 'function') {
-    throw DslError.of('invalidArgument', 'The abbreviations option must be a Map.');
+    throw dslError('invalidArgument', 'The abbreviations option must be a Map.');
+  }
+  const { expandLabels = false } = options;
+  if (typeof expandLabels !== 'boolean') {
+    throw dslError('invalidArgument', 'The expandLabels option must be a boolean.');
   }
   const { stress = 'none' } = options;
   if (stress !== 'none' && stress !== 'combining') {
-    throw DslError.of('invalidArgument', 'The stress option must be "none" or "combining".');
+    throw dslError('invalidArgument', 'The stress option must be "none" or "combining".');
   }
   const first = headwords?.[0]?.variants?.[0];
   return {
@@ -228,7 +243,7 @@ function settings(options: PlainTextOptions, unindexed: boolean, labels: boolean
     media: options.media ?? false,
     unindexed: options.unindexed ?? unindexed,
     labels: options.labels ?? labels,
-    abbreviations,
+    abbreviations: expandLabels ? abbreviations : undefined,
     subentries: options.subentries ?? true,
     stress,
     stressed: false,

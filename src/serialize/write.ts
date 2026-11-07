@@ -4,49 +4,33 @@
  * @packageDocumentation
  */
 
-import { type Diagnostic, DslError } from '../diagnostics/index.js';
+import { type Diagnostic, type DiagnosticCounts, dslError } from '../diagnostics/index.js';
 import type { DslEntry, ParsedDsl } from '../parse/parse.js';
 import { type DslPlugin, definePlugin, type PluginUse } from '../plugin/plugin.js';
 import { createJsonlHeader, type JsonlSummaryRecord } from './format.js';
-import { countsByCode, type DiagnosticTally } from './tally.js';
 
 /**
- * Options of {@link toJsonl} and {@link toJson}.
- *
- * @typeParam TOut - What the plugin makes of an entry.
- * @typeParam TOptions - The options of the plugin.
- * @experimental
+ * Options of {@link toJsonl} and {@link toJson}, besides the plugin: an export of the AST
+ * entries takes these only, an export of a plugin's output these and a `PluginUse`
+ * (`plugin`, and its `options`, required when the plugin requires them).
  */
-export interface ToJsonlOptions<TOut = unknown, TOptions = unknown> {
+export interface ToJsonlOptions {
   /**
-   * The plugin whose output is exported (its `name@version` goes to the header). Without one
-   * the entries are exported as parsed: the AST entries.
+   * End the document with a summary record: the entry count and the diagnostics by code,
+   * all of them, of every layer and of the plugin (`ParsedDsl.diagnosticCounts()` at the end
+   * of the export).
    */
-  readonly plugin?: DslPlugin<TOut, TOptions>;
-  /** The options of the plugin. */
-  readonly options?: TOptions;
-  /** End the document with a summary record: the entry count and the diagnostics by code. */
   readonly summary?: boolean;
-  /**
-   * The source of the diagnostic counts of the summary. It has to be the `diagnostics` sink of
-   * the options the dictionary was opened with: only then does it see every diagnostic, those
-   * of entries and plugins as well. Without it the summary counts `ParsedDsl.diagnostics` and
-   * the diagnostics of the AST entries, which is complete for an export without a plugin
-   * only: with a plugin it is required (`DSL0001` otherwise).
-   */
-  readonly tally?: DiagnosticTally;
 }
 
-/**
- * Options of {@link toJson}.
- *
- * @experimental
- */
-export interface ToJsonOptions<TOut = unknown, TOptions = unknown>
-  extends ToJsonlOptions<TOut, TOptions> {
+/** Options of {@link toJson}: those of {@link toJsonl}, and `pretty`. */
+export interface ToJsonOptions extends ToJsonlOptions {
   /** Indent the document by two spaces. Default `false`. */
   readonly pretty?: boolean;
 }
+
+/** The options of an export without a plugin. */
+type NoPlugin = { readonly plugin?: undefined; readonly options?: undefined };
 
 /** The parts of an export in order, each already rendered as JSON text. */
 interface Piece {
@@ -68,7 +52,8 @@ const compact: Render = (value) => JSON.stringify(value);
  *
  * Without a plugin the payload of an entry record is the AST entry (`DslEntry`, with
  * positions as the dictionary was parsed with them). With a plugin it is what the plugin
- * returns, which has to be JSON-serializable.
+ * returns, which has to be JSON-serializable: an output that is not, such as `undefined`,
+ * fails the export (`DSL7006`). A dictionary in raw mode cannot be exported (`DSL0001`).
  *
  * Reading starts when the first line is requested. The header needs the encoding to be known,
  * and for an ASCII-only file that is only at the end of the input, which is then read
@@ -81,14 +66,19 @@ const compact: Render = (value) => JSON.stringify(value);
  * for await (const line of toJsonl(dict, { plugin: article })) process.stdout.write(line);
  * ```
  *
- * @throws DslError synchronously for invalid arguments (`DSL0001`); `DSL0002` when iterating
- * a dictionary whose entries were read already; `DSL7006` if an entry cannot be serialized.
- * @experimental
+ * @throws DslError synchronously for invalid arguments (`DSL0001`: a dictionary in raw mode,
+ * an invalid plugin or option); `DSL0002` when iterating a dictionary whose entries were read
+ * already; `DSL7006` if an entry cannot be serialized.
  */
-export function toJsonl<TOut = unknown, TOptions = unknown>(
+export function toJsonl(
   dict: ParsedDsl,
-  options: ToJsonlOptions<TOut, TOptions> = {},
-): AsyncIterable<string> {
+  options?: ToJsonlOptions & NoPlugin,
+): AsyncIterable<string>;
+export function toJsonl<TOut, TOptions>(
+  dict: ParsedDsl,
+  options: ToJsonlOptions & PluginUse<TOut, TOptions>,
+): AsyncIterable<string>;
+export function toJsonl(dict: ParsedDsl, options: AnyOptions = {}): AsyncIterable<string> {
   const pieces = produce(dict, options, compact);
   return {
     async *[Symbol.asyncIterator]() {
@@ -108,16 +98,19 @@ export function toJsonl<TOut = unknown, TOptions = unknown>(
  * `header` and `summary` are the records of JSONL (with their `type`); `entries` lists the
  * payloads of the entry records. `summary` is there if requested. The other options and the
  * errors are those of {@link toJsonl}.
- *
- * @experimental
  */
-export function toJson<TOut = unknown, TOptions = unknown>(
+export function toJson(dict: ParsedDsl, options?: ToJsonOptions & NoPlugin): AsyncIterable<string>;
+export function toJson<TOut, TOptions>(
   dict: ParsedDsl,
-  options: ToJsonOptions<TOut, TOptions> = {},
+  options: ToJsonOptions & PluginUse<TOut, TOptions>,
+): AsyncIterable<string>;
+export function toJson(
+  dict: ParsedDsl,
+  options: AnyOptions & ToJsonOptions = {},
 ): AsyncIterable<string> {
   const { pretty = false } = options;
   if (typeof pretty !== 'boolean') {
-    throw DslError.of('invalidArgument', 'The pretty option must be a boolean.');
+    throw dslError('invalidArgument', 'The pretty option must be a boolean.');
   }
   const render: Render = (value, depth) => {
     const text = JSON.stringify(value, null, pretty ? 2 : undefined);
@@ -146,42 +139,42 @@ export function toJson<TOut = unknown, TOptions = unknown>(
   };
 }
 
+/** The options of an export as the implementation sees them. */
+interface AnyOptions extends ToJsonlOptions {
+  readonly plugin?: DslPlugin<unknown, unknown> | undefined;
+  readonly options?: unknown;
+}
+
 /** Checks the arguments and returns the pieces of the export, produced lazily. */
-function produce<TOut, TOptions>(
-  dict: ParsedDsl,
-  options: ToJsonlOptions<TOut, TOptions>,
-  render: Render,
-): AsyncIterable<Piece> {
-  if (typeof dict !== 'object' || dict === null || typeof dict.entries !== 'function') {
-    throw DslError.of('invalidArgument', 'The dictionary must be a result of parseDsl.');
-  }
-  if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
-  }
-  const { plugin, summary = false, tally } = options;
-  if (typeof summary !== 'boolean') {
-    throw DslError.of('invalidArgument', 'The summary option must be a boolean.');
-  }
-  if (plugin !== undefined) definePlugin(plugin);
+function produce(dict: ParsedDsl, options: AnyOptions, render: Render): AsyncIterable<Piece> {
   if (
-    tally !== undefined &&
-    (typeof tally !== 'object' || tally === null || typeof tally.report !== 'function')
+    typeof dict !== 'object' ||
+    dict === null ||
+    typeof dict.entries !== 'function' ||
+    typeof dict.diagnosticCounts !== 'function'
   ) {
-    throw DslError.of('invalidArgument', 'The tally option must be a DiagnosticTally.');
+    throw dslError('invalidArgument', 'The dictionary must be a result of parseDsl.');
   }
-  if (summary && plugin !== undefined && tally === undefined) {
-    throw DslError.of(
+  if (dict.bodyMode === 'raw') {
+    throw dslError(
       'invalidArgument',
-      'A summary of an export with a plugin needs the tally option: the diagnostics of entries ' +
-        'reach only the sink the dictionary was opened with.',
+      'A dictionary parsed with the body option "raw" cannot be exported: its bodies are not parsed.',
     );
   }
+  if (typeof options !== 'object' || options === null) {
+    throw dslError('invalidArgument', 'Options must be an object.');
+  }
+  const { plugin, summary = false } = options;
+  if (typeof summary !== 'boolean') {
+    throw dslError('invalidArgument', 'The summary option must be a boolean.');
+  }
+  if (plugin !== undefined) definePlugin(plugin);
   return { [Symbol.asyncIterator]: () => pieces(dict, options, render) };
 }
 
-async function* pieces<TOut, TOptions>(
+async function* pieces(
   dict: ParsedDsl,
-  { plugin, options, summary = false, tally }: ToJsonlOptions<TOut, TOptions>,
+  { plugin, options, summary = false }: AnyOptions,
   render: Render,
 ): AsyncGenerator<Piece> {
   const header = await dict.header;
@@ -189,35 +182,23 @@ async function* pieces<TOut, TOptions>(
   const record = createJsonlHeader({ header, info, ...(plugin === undefined ? {} : { plugin }) });
   yield { kind: 'header', text: render(record, 1) as string };
 
-  // Entry diagnostics are counted here only when there is no tally; then it is the AST.
-  const counted = new Map<string, number>();
   let count = 0;
   const entries: AsyncIterable<unknown> =
     plugin === undefined
       ? dict.entries()
-      : dict.entries({ plugin, options } as PluginUse<TOut, TOptions>);
+      : dict.entries({ plugin, options } as PluginUse<unknown, unknown>);
   for await (const entry of entries) {
-    let data = entry;
-    if (plugin === undefined) {
-      const ast = entry as DslEntry;
-      data = withoutCauses(ast);
-      if (summary && tally === undefined) {
-        for (const { code } of ast.diagnostics ?? [])
-          counted.set(code, (counted.get(code) ?? 0) + 1);
-      }
-    }
+    const data = plugin === undefined ? withoutCauses(entry as DslEntry) : entry;
     count++;
     yield { kind: 'entry', text: serialized(render, data, count) };
   }
 
   if (summary) {
-    if (tally === undefined) {
-      for (const { code } of dict.diagnostics) counted.set(code, (counted.get(code) ?? 0) + 1);
-    }
+    const counts: DiagnosticCounts = dict.diagnosticCounts();
     const record: JsonlSummaryRecord = {
       type: 'summary',
       entries: count,
-      diagnostics: tally === undefined ? countsByCode(counted) : tally.byCode,
+      diagnostics: counts.byCode,
     };
     yield { kind: 'summary', text: render(record, 1) as string };
   }
@@ -237,10 +218,10 @@ function serialized(render: Render, data: unknown, index: number): string {
     text = render(data, 2);
   } catch (error) {
     // BigInt, circular references and throwing `toJSON` methods.
-    throw DslError.of('notSerializable', `Entry ${index} cannot be serialized to JSON.`, error);
+    throw dslError('notSerializable', `Entry ${index} cannot be serialized to JSON.`, error);
   }
   if (text === undefined) {
-    throw DslError.of('notSerializable', `The output for entry ${index} is not JSON.`);
+    throw dslError('notSerializable', `The output for entry ${index} is not JSON.`);
   }
   return text;
 }

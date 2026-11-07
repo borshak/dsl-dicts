@@ -21,7 +21,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { type Article, type ArticleOptions, article } from '../../src/article/index.js';
+import { type Article, type ArticlePluginOptions, article } from '../../src/article/index.js';
 import { parseDsl } from '../../src/index.js';
 import { collect } from './helpers.js';
 
@@ -32,7 +32,7 @@ const fixtures = import.meta.glob<string>('../fixtures/legacy/*.dsl', {
   eager: true,
 });
 
-async function read(name: string, options?: ArticleOptions) {
+async function read(name: string, options?: ArticlePluginOptions) {
   const text = fixtures[`../fixtures/legacy/${name}`];
   if (text === undefined) throw new Error(`Missing fixture ${name}`);
   const dict = parseDsl(new TextEncoder().encode(text));

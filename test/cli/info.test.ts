@@ -44,9 +44,9 @@ describe('info', () => {
     expect(bare.stdout).toContain('DSL2001');
   });
 
-  it('prints one JSON document with --json', async () => {
+  it('prints one JSON document with --format json', async () => {
     const dir = setup();
-    const { code, stdout } = await run(['info', 'a.dsl', '--json'], dir);
+    const { code, stdout } = await run(['info', 'a.dsl', '--format', 'json'], dir);
     expect(code).toBe(0);
     const report = JSON.parse(stdout);
     expect(report).toMatchObject({
@@ -69,9 +69,32 @@ describe('info', () => {
     ]);
   });
 
+  it('prints the diagnostics with --verbose, none with --quiet or by default', async () => {
+    const dir = setup();
+    const quiet = await run(['info', 'a.dsl'], dir);
+    expect(quiet.stderr).toBe('');
+    expect((await run(['info', 'a.dsl', '-q'], dir)).stderr).toBe('');
+    const verbose = await run(['info', 'a.dsl', '--verbose'], dir);
+    expect(verbose.code).toBe(0);
+    expect(verbose.stderr).toMatch(/a\.dsl:\d+:\d+: warning DSL4202 /);
+    expect(verbose.stdout).toBe(quiet.stdout);
+  });
+
+  it('fails in strict mode from the severity given', async () => {
+    const dir = setup();
+    expect((await run(['info', 'a.dsl', '--strict'], dir)).code).toBe(0);
+    const failed = await run(['info', 'a.dsl', '--strict=warning'], dir);
+    expect(failed.code).toBe(2);
+    expect(failed.stdout).toBe('');
+    expect(failed.stderr).toContain('DSL4202');
+  });
+
   it('uses the encoding options', async () => {
     const dir = setup();
-    const { stdout } = await run(['info', 'a.dsl', '--json', '--encoding', 'utf-16le'], dir);
+    const { stdout } = await run(
+      ['info', 'a.dsl', '--format', 'json', '--encoding', 'utf-16le'],
+      dir,
+    );
     expect(JSON.parse(stdout).decode).toMatchObject({ encoding: 'utf-16le', source: 'option' });
   });
 
@@ -79,7 +102,15 @@ describe('info', () => {
     const dir = setup();
     expect((await run(['info', 'nope.dsl'], dir)).code).toBe(2);
     expect((await run(['info', '.'], dir)).code).toBe(2);
-    for (const args of [['info'], ['info', 'a.dsl', 'b.dsl'], ['info', 'a.dsl', '--bogus']]) {
+    for (const args of [
+      ['info'],
+      ['info', 'a.dsl', 'b.dsl'],
+      ['info', 'a.dsl', '--bogus'],
+      ['info', 'a.dsl', '--json'],
+      ['info', 'a.dsl', '--format', 'yaml'],
+      ['info', 'a.dsl', '--verbose', '--quiet'],
+      ['info', 'a.dsl', '--strict=no'],
+    ]) {
       const { code, stdout } = await run(args, dir);
       expect(code, args.join(' ')).toBe(1);
       expect(stdout).toBe('');

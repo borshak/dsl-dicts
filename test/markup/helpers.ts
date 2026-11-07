@@ -7,7 +7,7 @@ import {
   createCollectingSink,
   type Diagnostic,
   type MarkupNode,
-  type MarkupOptions,
+  type ParseBodyOptions,
   parseBody,
   parseMarkup,
   type RawEntry,
@@ -20,14 +20,14 @@ export interface Parsed {
 }
 
 /** Parses markup without positions, collecting diagnostics. */
-export function parse(text: string, options: MarkupOptions = {}): Parsed {
+export function parse(text: string, options: ParseBodyOptions = {}): Parsed {
   const sink = createCollectingSink();
   const nodes = parseMarkup(text, { positions: false, ...options, diagnostics: sink });
   return { nodes, diagnostics: sink.diagnostics, codes: sink.diagnostics.map((d) => d.code) };
 }
 
 /** Parses a body without positions, collecting diagnostics. */
-export function parseEntry(entry: RawEntry, options: MarkupOptions = {}): Parsed {
+export function parseEntry(entry: RawEntry, options: ParseBodyOptions = {}): Parsed {
   const sink = createCollectingSink();
   const nodes = parseBody(entry, { positions: false, ...options, diagnostics: sink });
   return { nodes, diagnostics: sink.diagnostics, codes: sink.diagnostics.map((d) => d.code) };

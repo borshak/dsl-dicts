@@ -61,10 +61,12 @@ const entries = [
   ['dsl-dicts', 'readJsonl', null],
   ['dsl-dicts', 'parseJsonlHeader', null],
   ['dsl-dicts', 'createJsonlHeader', null],
-  ['dsl-dicts', 'createDiagnosticTally', null],
+  ['dsl-dicts', 'walkEntry', null],
+  ['dsl-dicts', 'getTagSpec', null],
+  ['dsl-dicts', 'isKnownColor', null],
+  ['dsl-dicts', 'DIAGNOSTICS', null],
   ['dsl-dicts', 'JSONL_FORMAT', 'dsl-dicts/jsonl'],
   ['dsl-dicts', 'JSONL_FORMAT_VERSION', 1],
-  ['dsl-dicts/node', 'describeRuntime', null],
   ['dsl-dicts/node', 'openDsl', null],
   ['dsl-dicts/node', 'findDictionaries', null],
   ['dsl-dicts/article', 'ARTICLE_VERSION', '1.0.0'],
@@ -77,6 +79,16 @@ const entries = [
   ['dsl-dicts/plugins', 'searchText', null],
 ];
 
+// Removed before 2.0: none of these may come back by accident.
+const removed = [
+  ['dsl-dicts', 'createDiagnosticTally'],
+  ['dsl-dicts', 'createSegmenter'],
+  ['dsl-dicts', 'MAX_VARIANTS'],
+  ['dsl-dicts', 'MAX_EXPANDED_LENGTH'],
+  ['dsl-dicts/node', 'describeRuntime'],
+  ['dsl-dicts/node', 'RUNTIME'],
+];
+
 // Besides the exports: the built-in plugins run on the packed core, through parseDsl.
 const checkBody = `
 for (const [specifier, name, expected] of ${JSON.stringify(entries)}) {
@@ -84,6 +96,10 @@ for (const [specifier, name, expected] of ${JSON.stringify(entries)}) {
   assert.ok(name in mod, specifier + ' must export ' + name);
   if (expected !== null) assert.equal(mod[name], expected, specifier + ' ' + name);
 }
+for (const [specifier, name] of ${JSON.stringify(removed)}) {
+  assert.ok(!(name in (await load(specifier))), specifier + ' must not export ' + name);
+}
+assert.equal((await load('dsl-dicts')).DIAGNOSTICS.get('DSL1202').name, 'unknownCodePage');
 console.log('ok exports');
 const { parseDsl } = await load('dsl-dicts');
 const { plainText, searchText } = await load('dsl-dicts/plugins');
@@ -95,7 +111,7 @@ for (const plugin of [plainText, searchText]) {
 }
 assert.deepEqual(results, [
   { headwords: ['colo(u)r'], text: 'color hue' },
-  { headwords: ['color', 'colour'], text: 'hue' },
+  { forms: ['color', 'colour'], text: 'hue' },
 ]);
 console.log('ok plugins', plainText.name + '@' + plainText.version, searchText.name + '@' + searchText.version);
 
@@ -226,8 +242,12 @@ try {
       : execFileSync(bin, args, { cwd: project, encoding: 'utf8' });
   const outputs = {};
   for (const view of ['article', 'ast']) {
-    outputs[view] = run('convert', dictionary, '--view', view, '--summary');
+    const plugin = view === 'ast' ? [] : ['--plugin', view];
+    outputs[view] = run('convert', dictionary, ...plugin, '--summary');
   }
+  const info = JSON.parse(run('info', dictionary, '--format', 'json', '--strict'));
+  if (info.entries !== 2) throw new Error(`dsl-dicts info counted ${info.entries} entries`);
+  console.log(`bin dsl-dicts info --format json: ${info.entries} entries`);
   writeFileSync(join(project, 'outputs.json'), JSON.stringify(outputs));
   const checkConvert = `import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -246,7 +266,7 @@ for (const [view, text] of Object.entries(outputs)) {
   assert.equal(list.at(-1).entries, 2);
   if (view === 'article') assert.deepEqual(list[0].data.senses[0].translations, ['кошка']);
   else assert.equal(list[1].data.headwords[0].text, 'dog');
-  console.log('ok convert --view', view, list.length, 'records');
+  console.log('ok convert', view === 'ast' ? '(AST)' : '--plugin ' + view, list.length, 'records');
 }
 `;
   writeFileSync(join(project, 'check-convert.mjs'), checkConvert);

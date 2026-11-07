@@ -32,12 +32,13 @@ describe.skipIf(!built)('dsl-dicts as a process', () => {
   });
 
   it.each(['ast', 'article', 'plain-text', 'search-text'])(
-    'converts with --view %s',
+    'converts with the plugin %s',
     async (view) => {
       const dir = tempDir();
       writeFiles(dir, { 'a.dsl': DICT, 'a_abrv.dsl': ABRV });
+      const plugin = view === 'ast' ? [] : ['--plugin', view];
       const { code, stdout, stderr } = await spawnCli(
-        ['convert', 'a.dsl', '--view', view, '--summary'],
+        ['convert', 'a.dsl', ...plugin, '--summary'],
         dir,
       );
       expect(code).toBe(0);
@@ -52,7 +53,7 @@ describe.skipIf(!built)('dsl-dicts as a process', () => {
     const dir = tempDir();
     writeFiles(dir, { 'a.dsl.dz': DICT });
     const jsonl = await spawnCli(
-      ['convert', 'a.dsl.dz', '--view', 'article', '-o', 'out.jsonl', '-q'],
+      ['convert', 'a.dsl.dz', '--plugin', 'article', '-o', 'out.jsonl', '-q'],
       dir,
     );
     expect(jsonl).toEqual({ code: 0, stdout: '', stderr: '' });
@@ -70,7 +71,7 @@ describe.skipIf(!built)('dsl-dicts as a process', () => {
       'sub/b_abrv.dsl': ABRV,
     });
     const { code, stderr } = await spawnCli(
-      ['convert', '.', '-o', 'out', '--recursive', '--view', 'article'],
+      ['convert', '.', '-o', 'out', '--recursive', '--plugin', 'article'],
       dir,
     );
     expect(code).toBe(0);
@@ -105,7 +106,10 @@ describe.skipIf(!built)('dsl-dicts as a process', () => {
     const code = async (...args: string[]) => (await spawnCli(args, dir)).code;
     expect(await code('convert', 'a.dsl')).toBe(0);
     expect(await code('convert')).toBe(1);
-    expect(await code('convert', 'a.dsl', '--view', 'nope')).toBe(1);
+    expect(await code('convert', 'a.dsl', '--plugin', 'nope')).toBe(1);
+    expect(
+      await code('convert', 'a.dsl', '--plugin', 'article', '--plugin-options', '{"x":1}'),
+    ).toBe(1);
     expect(await code('convert', 'missing.dsl')).toBe(2);
     expect(await code('convert', 'bad.dsl', '--strict')).toBe(2);
     expect(await code('convert', 'a.dsl', '--plugin', 'none.mjs')).toBe(3);
@@ -115,7 +119,7 @@ describe.skipIf(!built)('dsl-dicts as a process', () => {
   it('prints info', async () => {
     const dir = tempDir();
     writeFiles(dir, { 'a.dsl': DICT });
-    const { code, stdout } = await spawnCli(['info', 'a.dsl', '--json'], dir);
+    const { code, stdout } = await spawnCli(['info', 'a.dsl', '--format', 'json'], dir);
     expect(code).toBe(0);
     expect(JSON.parse(stdout)).toMatchObject({ entries: 2, dictionary: { name: 'Synthetic' } });
   });
@@ -159,7 +163,7 @@ describe.skipIf(!built)('dsl-dicts when its output is closed', () => {
       (resolve) => {
         const child = spawn(
           'sh',
-          ['-c', `"${process.execPath}" "${CLI}" convert big.dsl --view plain-text | head -n 2`],
+          ['-c', `"${process.execPath}" "${CLI}" convert big.dsl --plugin plain-text | head -n 2`],
           { cwd: dir },
         );
         let stdout = '';

@@ -20,7 +20,8 @@ export type { CliIo } from './io.js';
  *
  * @param argv - The arguments after the program name.
  * @param io - The streams and the working directory.
- * @returns The exit code: 0 success, 1 usage error, 2 dictionary or I/O error, 3 plugin error.
+ * @returns The exit code (`EXIT`, stable): 0 success, 1 usage error, 2 dictionary or I/O
+ * error, 3 plugin error, 70 internal error.
  */
 export async function runCli(argv: readonly string[], io: CliIo): Promise<number> {
   const [command, ...rest] = argv;

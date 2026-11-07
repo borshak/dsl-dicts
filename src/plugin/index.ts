@@ -9,6 +9,7 @@ export {
   createPluginDiagnostic,
   type DictionaryContext,
   type DictionaryContextInit,
+  type DslFiles,
   type DslPlugin,
   definePlugin,
   type EntryTransform,

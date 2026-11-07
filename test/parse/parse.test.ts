@@ -6,10 +6,12 @@ import {
   type DslEntry,
   type DslError,
   type MarkupNode,
+  type ParseDslOptions,
   parseBody,
   parseDsl,
   parseHeadwords,
   type RawEntry,
+  type RawParseDslOptions,
   segmentDsl,
 } from '../../src/index.js';
 import { catchError, encode, gzip } from '../decode/helpers.js';
@@ -79,20 +81,38 @@ describe('parseDsl', () => {
 
   it('types entries by body mode', () => {
     expectTypeOf(parseDsl(TEXT).entries()).toEqualTypeOf<AsyncIterable<DslEntry>>();
-    expectTypeOf(parseDsl(TEXT, { body: 'ast' }).entries()).toEqualTypeOf<
+    expectTypeOf(parseDsl(TEXT, { positions: false }).entries()).toEqualTypeOf<
       AsyncIterable<DslEntry<readonly MarkupNode[]>>
     >();
     expectTypeOf(parseDsl(TEXT, { body: 'raw' }).batches()).toEqualTypeOf<
-      AsyncIterable<DslEntry<readonly BodyLine[]>[]>
+      AsyncIterable<readonly DslEntry<readonly BodyLine[]>[]>
     >();
+    const options: ParseDslOptions = { positions: false };
+    expectTypeOf(parseDsl(TEXT, options).entries()).toEqualTypeOf<AsyncIterable<DslEntry>>();
+    const raw: RawParseDslOptions = { body: 'raw' };
+    expectTypeOf(parseDsl(TEXT, raw).entries()).toEqualTypeOf<
+      AsyncIterable<DslEntry<readonly BodyLine[]>>
+    >();
+    expect(parseDsl(TEXT, raw).bodyMode).toBe('raw');
+    expect(parseDsl(TEXT).bodyMode).toBe('ast');
   });
 
-  it('keeps file diagnostics on the result and entry diagnostics on entries', async () => {
+  it('keeps every diagnostic on the result, and those of each entry on the entry', async () => {
     const sink = createCollectingSink();
     const text = `#NAME "x"\n#INDEX_LANGUAGE "english"\n#CONTENTS_LANGUAGE "Russian"\na(b\n\t[b]x\n\n\ty\nc\n\tz\n`;
     const dict = parseDsl(encode(text, 'utf-8', true), { diagnostics: sink });
     const entries = await collect(dict.entries());
-    expect(dict.diagnostics.map((d) => d.code)).toEqual(['DSL2007', 'DSL2203']);
+    expect(dict.diagnostics.map((d) => d.code)).toEqual([
+      'DSL2007',
+      'DSL2203',
+      'DSL3003',
+      'DSL4202',
+    ]);
+    expect(dict.diagnosticCounts()).toEqual({
+      total: 4,
+      byCode: { DSL2007: 1, DSL2203: 1, DSL3003: 1, DSL4202: 1 },
+      bySeverity: { error: 0, warning: 3, info: 1 },
+    });
     expect(entries.map((e) => e.diagnostics?.map((d) => d.code))).toEqual([
       ['DSL3003', 'DSL4202'],
       undefined,

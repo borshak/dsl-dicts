@@ -7,8 +7,9 @@
 export {
   hasZones,
   normalizeLabel,
-  type PlainTextOptions,
   SEARCH_ZONES,
+  type ToPlainTextOptions,
   toPlainText,
+  type ZoneTextOptions,
   zoneText,
 } from './plain-text.js';

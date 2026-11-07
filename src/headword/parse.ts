@@ -12,7 +12,7 @@ import {
   createDiagnostic,
   type DiagnosticName,
   type DiagnosticSink,
-  DslError,
+  dslError,
   type SourcePosition,
 } from '../diagnostics/index.js';
 import type { Headword, MarkupNode } from '../markup/ast.js';
@@ -21,26 +21,14 @@ import { orderedSink, reporter } from '../markup/report.js';
 import { flipCase, isEscapedSpace, type Token, Tokenizer } from '../markup/tokenizer.js';
 import { positionInLine, type RawEntry, type RawLine } from '../segment/index.js';
 
-/**
- * Headwords with a longer sortable text are not expanded, as in GoldenDict (`DSL3202`).
- *
- * @experimental
- */
-export const MAX_EXPANDED_LENGTH = 500;
+/** Headwords with a longer sortable text are not expanded, as in GoldenDict (`DSL3202`). */
+const MAX_EXPANDED_LENGTH = 500;
 
-/**
- * At most this many combinations of optional parts are generated (`DSL3203`).
- *
- * @experimental
- */
-export const MAX_VARIANTS = 256;
+/** At most this many combinations of optional parts are generated (`DSL3203`). */
+const MAX_VARIANTS = 256;
 
-/**
- * Options of {@link parseHeadword} and {@link parseHeadwords}.
- *
- * @experimental
- */
-export interface HeadwordOptions {
+/** Options of {@link parseHeadwords}, and the common options of {@link parseHeadword}. */
+export interface ParseHeadwordsOptions {
   /**
    * Add `position` and `end` to the headword and its `display` nodes. Default `true`.
    * Diagnostics keep their positions either way.
@@ -53,12 +41,8 @@ export interface HeadwordOptions {
   readonly diagnostics?: DiagnosticSink;
 }
 
-/**
- * Options of {@link parseHeadword}.
- *
- * @experimental
- */
-export interface ParseHeadwordOptions extends HeadwordOptions {
+/** Options of {@link parseHeadword}. */
+export interface ParseHeadwordOptions extends ParseHeadwordsOptions {
   /**
    * What `~` stands for in `text` and `variants` (`^~` flips the case of its first
    * character), usually the first index form of the entry's first headword. Without it, a `~`
@@ -94,11 +78,14 @@ const ORIGIN: SourcePosition = { offset: 0, line: 1, column: 1 };
  * (`DSL3004`); tags and links outside braces are parsed and their text is sortable
  * (`DSL3101`). Markup is parsed by the rules of `parseMarkup` (`DSL4xxx`).
  *
+ * Limits, against pathological input: a headword whose sortable text is longer than 500
+ * characters is not expanded (its only index form keeps the parentheses as text, `DSL3202`),
+ * and at most 256 combinations of optional parts are generated (`DSL3203`).
+ *
  * Never throws on any input, except a `DslError` for invalid arguments or from a strict
  * diagnostic sink.
  *
  * @param input - The headword, or a line from the segmenter (its positions are used).
- * @experimental
  */
 export function parseHeadword(
   input: string | RawLine,
@@ -111,10 +98,10 @@ export function parseHeadword(
   } else if (typeof input === 'object' && input !== null && typeof input.text === 'string') {
     line = input;
   } else {
-    throw DslError.of('invalidArgument', 'The input must be a string or a RawLine.');
+    throw dslError('invalidArgument', 'The input must be a string or a RawLine.');
   }
   if (options.tilde !== undefined && typeof options.tilde !== 'string') {
-    throw DslError.of('invalidArgument', 'The tilde option must be a string.');
+    throw dslError('invalidArgument', 'The tilde option must be a string.');
   }
   const sink = orderedSink(options.diagnostics);
   const headword = buildHeadword(line, {
@@ -132,15 +119,14 @@ export function parseHeadword(
  * it stands for nothing (`DSL3102`).
  *
  * @returns One headword per line, in order.
- * @experimental
  */
 export function parseHeadwords(
   entry: Pick<RawEntry, 'headwords'>,
-  options: HeadwordOptions = {},
+  options: ParseHeadwordsOptions = {},
 ): Headword[] {
   checkOptions(options);
   if (typeof entry !== 'object' || entry === null || !Array.isArray(entry.headwords)) {
-    throw DslError.of('invalidArgument', 'The entry must have a headwords array.');
+    throw dslError('invalidArgument', 'The entry must have a headwords array.');
   }
   const sink = orderedSink(options.diagnostics);
   const positions = options.positions !== false;
@@ -160,9 +146,9 @@ export function tildeValue(headwords: readonly Headword[]): string | undefined {
   return headwords[0]?.variants[0];
 }
 
-function checkOptions(options: HeadwordOptions): void {
+function checkOptions(options: ParseHeadwordsOptions): void {
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
+    throw dslError('invalidArgument', 'Options must be an object.');
   }
 }
 

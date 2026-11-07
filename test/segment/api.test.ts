@@ -18,7 +18,7 @@ describe('segmentDsl', () => {
 
   it('reads gzip input and yields batches', async () => {
     const result = segmentDsl(await gzip(encode(TEXT, 'utf-8', true)), { chunkSize: 16 });
-    const batches: RawEntry[][] = [];
+    const batches: (readonly RawEntry[])[] = [];
     for await (const batch of result.batches()) batches.push(batch);
     expect(batches.every((batch) => batch.length > 0)).toBe(true);
     expect(headwords(batches.flat())).toEqual([['a'], ['b'], ['c']]);

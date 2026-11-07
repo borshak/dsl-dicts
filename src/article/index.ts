@@ -26,8 +26,8 @@ export {
 } from './extractors.js';
 export {
   ARTICLE_VERSION,
-  type ArticleOptions,
   type ArticlePluginConfig,
+  type ArticlePluginOptions,
   article,
   createArticlePlugin,
 } from './plugin.js';

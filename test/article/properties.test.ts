@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   type Article,
-  type ArticleOptions,
+  type ArticlePluginOptions,
   article,
   DEFAULT_EXTRACTORS,
   type Sense,
@@ -100,9 +100,10 @@ const dictionary = fc
       `${HEADER}${entries.map((e) => [...e.headwords, ...e.body].join('\n')).join('\n')}\n`,
   );
 
-const options: fc.Arbitrary<ArticleOptions> = fc.record(
+const options: fc.Arbitrary<ArticlePluginOptions> = fc.record(
   {
-    labels: fc.constantFrom('expand' as const, 'keep' as const),
+    labels: fc.boolean(),
+    expandLabels: fc.boolean(),
     stress: fc.constantFrom('none' as const, 'combining' as const),
     secondary: fc.boolean(),
     splitTranslations: fc.boolean(),

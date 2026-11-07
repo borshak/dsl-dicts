@@ -28,8 +28,6 @@ import { NewlineNormalizer, TextOutput } from './text-output.js';
  * - `directive`: the `#SOURCE_CODE_PAGE` header directive.
  * - `default`: the `defaultEncoding` option (or its default, `windows-1251`).
  * - `string`: the input was a string; nothing was decoded.
- *
- * @experimental
  */
 export type EncodingSource =
   | 'option'
@@ -40,10 +38,14 @@ export type EncodingSource =
   | 'default'
   | 'string';
 
-/** The encoding decision. */
+/** The encoding decision: which encoding the input was decoded with, and why. */
 export interface EncodingDecision {
-  /** Canonical WHATWG encoding name, e.g. `utf-16le` or `windows-1251`. */
+  /**
+   * Canonical WHATWG encoding name, e.g. `utf-16le` or `windows-1251`; `utf-16` for string
+   * input, which is not decoded (the label is nominal: a JavaScript string is UTF-16).
+   */
   readonly encoding: string;
+  /** How the encoding was chosen; see {@link EncodingSource}. */
   readonly source: EncodingSource;
   /** A byte order mark was found and stripped. */
   readonly bom: boolean;

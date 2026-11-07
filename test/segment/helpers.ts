@@ -5,16 +5,16 @@
 import {
   type BodyLine,
   createCollectingSink,
-  createSegmenter,
   type Diagnostic,
   type DslHeader,
   positionInLine,
   type RawEntry,
   type RawLine,
-  type SegmentOptions,
+  type SegmentDslOptions,
   type SourcePosition,
   segmentDsl,
 } from '../../src/index.js';
+import { createSegmenter } from '../../src/segment/segmenter.js';
 
 export const HEADER = '#NAME "Test"\n#INDEX_LANGUAGE "English"\n#CONTENTS_LANGUAGE "Russian"\n';
 
@@ -55,7 +55,7 @@ export function segment(text: string, sizes: number | readonly number[] = 65536)
 /** Runs `segmentDsl` to the end. */
 export async function segmentAsync(
   source: Parameters<typeof segmentDsl>[0],
-  options?: SegmentOptions,
+  options?: SegmentDslOptions,
 ): Promise<Segmented> {
   const result = segmentDsl(source, options);
   const entries: RawEntry[] = [];

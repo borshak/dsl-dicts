@@ -17,35 +17,33 @@
  * - `DSL7xxx`: serialization. All are thrown as a `DslError`: a JSONL document that is not
  *   readable by this version (`readJsonl`), or output that cannot be serialized (`toJsonl`).
  *
- * Codes are stable: once released, a code keeps its meaning and is never reused.
+ * Codes are stable: once released, a code keeps its meaning and is never reused. Codes outside
+ * the catalog come from plugins, namespaced by the plugin name: `<plugin-name>/<id>`, such as
+ * `my-plugin/no-translation` (see `createPluginDiagnostic`).
  *
  * @packageDocumentation
  */
 
-/** Severity of a diagnostic. */
+/**
+ * Severity of a diagnostic, from the most to the least severe: `error` (the input is broken,
+ * and the result may lose content), `warning` (the input is suspect, and the result is a
+ * best guess), `info` (a remark: nothing is lost).
+ */
 export type Severity = 'error' | 'warning' | 'info';
 
-/** Catalog entry of one diagnostic code. */
-export interface DiagnosticSpec {
-  /** Stable code, `DSL` followed by four digits. */
+/** The fields of a catalog entry, as written in the table below. */
+interface CatalogEntry {
   readonly code: string;
-  /** Severity used when the code is reported. */
   readonly severity: Severity;
-  /** One-line description of the problem. */
   readonly summary: string;
-  /**
-   * The code is never reported to a diagnostic sink: it is only thrown as a `DslError`
-   * (usage errors, unreadable input, missing runtime features).
-   */
   readonly thrown?: true;
 }
 
 /**
- * All diagnostic codes, keyed by a symbolic name used in the source code.
- *
- * @experimental
+ * The catalog, keyed by a symbolic name used in the source code. Internal: the names are not
+ * part of the API (see {@link DiagnosticSpec.name}).
  */
-export const DIAGNOSTICS = {
+export const CATALOG = {
   invalidArgument: {
     code: 'DSL0001',
     severity: 'error',
@@ -61,7 +59,9 @@ export const DIAGNOSTICS = {
   cancelled: {
     code: 'DSL0003',
     severity: 'error',
-    summary: 'Processing was cancelled before the requested result was available.',
+    summary:
+      'Processing was cancelled before the requested result was available, or aborted with ' +
+      'the signal option (the abort reason is the cause).',
     thrown: true,
   },
 
@@ -467,24 +467,62 @@ export const DIAGNOSTICS = {
     summary: 'An entry or the output of a plugin cannot be serialized to JSON.',
     thrown: true,
   },
-} as const satisfies Record<string, DiagnosticSpec>;
+} as const satisfies Record<string, CatalogEntry>;
 
-/** Symbolic name of a diagnostic, e.g. `unknownCodePage`. */
-export type DiagnosticName = keyof typeof DIAGNOSTICS;
+/** Symbolic name of a catalog entry, e.g. `unknownCodePage`. Internal. */
+export type DiagnosticName = keyof typeof CATALOG;
 
-/** Stable diagnostic code, e.g. `DSL1202`. */
-export type DiagnosticCode = (typeof DIAGNOSTICS)[DiagnosticName]['code'];
+/**
+ * A code of the catalog, e.g. `DSL1202`. The catalog grows in minor versions, so do not
+ * switch exhaustively over it; `Diagnostic.code` also admits codes of plugins.
+ */
+export type DiagnosticCode = (typeof CATALOG)[DiagnosticName]['code'];
 
-const BY_CODE: ReadonlyMap<string, DiagnosticSpec> = new Map(
-  Object.values(DIAGNOSTICS).map((spec) => [spec.code, spec]),
+/** Catalog entry of one diagnostic code. */
+export interface DiagnosticSpec {
+  /** Stable code, `DSL` followed by four digits. */
+  readonly code: DiagnosticCode;
+  /**
+   * A short name of the problem in camel case, such as `unknownCodePage`. Informational, for
+   * documentation and messages: it is not a stable identifier and may change in any version.
+   * Use `code`.
+   */
+  readonly name: string;
+  /** Severity used when the code is reported. */
+  readonly severity: Severity;
+  /** One-line description of the problem. */
+  readonly summary: string;
+  /**
+   * The code is never reported to a diagnostic sink: it is only thrown as a `DslError`
+   * (usage errors, unreadable input, missing runtime features).
+   */
+  readonly thrown?: true;
+}
+
+/**
+ * The catalog: every diagnostic code of dsl-dicts with its default severity and summary, in
+ * code order. Codes are added in minor versions; a released code keeps its meaning and is
+ * never reused.
+ *
+ * @example
+ * ```ts
+ * DIAGNOSTICS.get('DSL1202')?.summary;
+ * for (const [code, spec] of DIAGNOSTICS) console.log(code, spec.severity, spec.summary);
+ * ```
+ */
+export const DIAGNOSTICS: ReadonlyMap<DiagnosticCode, DiagnosticSpec> = new Map(
+  Object.entries(CATALOG).map(([name, entry]): [DiagnosticCode, DiagnosticSpec] => [
+    entry.code,
+    Object.freeze({ ...entry, name }),
+  ]),
 );
 
 /**
- * Finds the catalog entry of a code.
+ * Finds the catalog entry of a code, such as the `code` of a diagnostic, which may be a code
+ * of a plugin.
  *
  * @returns The entry, or `undefined` if the code is not in the catalog.
- * @experimental
  */
 export function findDiagnosticSpec(code: string): DiagnosticSpec | undefined {
-  return BY_CODE.get(code);
+  return DIAGNOSTICS.get(code as DiagnosticCode);
 }

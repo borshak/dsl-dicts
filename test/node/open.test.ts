@@ -409,10 +409,43 @@ describe('missing and broken companions', () => {
       'foo.dsl': '#NAME "x"\na\n\tb\n',
       'foo_abrv.dsl': `${ABRV}n\n\tagain\n`,
     });
+    const before = dict.diagnostics;
     await collect(dict.entries());
+    // The same array on every read, which grows as the entries are read.
+    expect(dict.diagnostics).toBe(before);
     const codes = dict.diagnostics.map((d) => d.code);
     expect(codes[0]).toBe('DSL6001');
     expect(codes).toContain('DSL2001');
+    expect(dict.diagnosticCounts().byCode).toMatchObject({ DSL6001: 1, DSL2001: 2 });
+    expect(dict.diagnosticCounts().total).toBe(codes.length);
+    expect(dict.bodyMode).toBe('ast');
+  });
+
+  it('keeps at most diagnosticsLimit of them, companions included, and counts all', async () => {
+    const { dict } = await open(
+      { 'foo.dsl': '#NAME "x"\na\n\tb\n', 'foo_abrv.dsl': `${ABRV}n\n\tagain\n` },
+      'foo.dsl',
+      { diagnosticsLimit: 1 },
+    );
+    await collect(dict.entries());
+    expect(dict.diagnostics.map((d) => d.code)).toEqual(['DSL6001']);
+    expect(dict.diagnosticCounts().total).toBe(3);
+  });
+
+  it('aborts with the signal, while opening and while reading', async () => {
+    const dir = tempDir();
+    writeFiles(dir, { 'foo.dsl': DICT, 'foo_abrv.dsl': ABRV });
+    const reason = new Error('enough');
+    await expect(
+      openDsl(join(dir, 'foo.dsl'), { signal: AbortSignal.abort(reason) }),
+    ).rejects.toMatchObject({ code: 'DSL0003', cause: reason });
+    const controller = new AbortController();
+    const dict = await openDsl(join(dir, 'foo.dsl'), { signal: controller.signal });
+    controller.abort(reason);
+    await expect(collect(dict.entries())).rejects.toMatchObject({ code: 'DSL0003' });
+    await expect(openDsl(join(dir, 'foo.dsl'), { signal: 'x' as never })).rejects.toMatchObject({
+      code: 'DSL0001',
+    });
   });
 });
 
@@ -443,14 +476,19 @@ describe('plugins through openDsl', () => {
     const again = await openDsl(join(dir, 'foo.dsl.dz'));
     await collect(again.batches({ plugin: probe }));
     expect(seen).toEqual([
-      expect.objectContaining({ annotation: again.annotation, abbreviations: again.abbreviations }),
+      expect.objectContaining({
+        annotation: again.annotation,
+        abbreviations: again.abbreviations,
+        files: again.files,
+      }),
     ]);
+    expect(again.files).toMatchObject({ dictionary: join(dir, 'foo.dsl.dz') });
   });
 
   it('works with batches and the search-text plugin', async () => {
     const { dict } = await open({ 'foo.dsl': DICT });
     const batches = await collect(dict.batches({ plugin: searchText }));
-    expect(batches.flat().map((o) => o.headwords)).toEqual([['cat'], ['dog']]);
+    expect(batches.flat().map((o) => o.forms)).toEqual([['cat'], ['dog']]);
   });
 
   it('rejects a plugin with raw bodies, like parseDsl', async () => {

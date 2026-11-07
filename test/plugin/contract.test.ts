@@ -5,10 +5,12 @@ import {
   createDictionaryContext,
   createPluginDiagnostic,
   type DictionaryContext,
+  type DslEntry,
   type DslError,
   type DslPlugin,
   definePlugin,
   type EntryTransform,
+  type ParseDslOptions,
   type ParsedDsl,
   type PluginEntry,
   parseDsl,
@@ -62,8 +64,14 @@ describe('plugin types', () => {
       AsyncIterable<string>
     >();
     expectTypeOf(parseDsl(TEXT).batches({ plugin, options: { prefix: '' } })).toEqualTypeOf<
-      AsyncIterable<string[]>
+      AsyncIterable<readonly string[]>
     >();
+    // Options held in a variable of the declared type still select the AST overload.
+    const options: ParseDslOptions = { positions: false };
+    expectTypeOf(parseDsl(TEXT, options).entries({ plugin: plainText })).toEqualTypeOf<
+      AsyncIterable<PlainTextResult>
+    >();
+    expectTypeOf<PluginEntry>().toEqualTypeOf<DslEntry>();
     expectTypeOf(parseDsl(TEXT).entries({ plugin: plainText })).toEqualTypeOf<
       AsyncIterable<PlainTextResult>
     >();

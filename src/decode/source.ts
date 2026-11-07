@@ -4,7 +4,8 @@
  * @packageDocumentation
  */
 
-import { DslError } from '../diagnostics/index.js';
+import { DslError, dslError } from '../diagnostics/index.js';
+import { onAbort } from './abort.js';
 
 /**
  * Input accepted by the decoder.
@@ -16,8 +17,6 @@ import { DslError } from '../diagnostics/index.js';
  * - `AsyncIterable<Uint8Array>`, `Iterable<Uint8Array>`: e.g. a Node.js readable stream.
  *
  * Chunks are not copied: do not modify a chunk after it has been produced.
- *
- * @experimental
  */
 export type DslSource =
   | string
@@ -46,50 +45,59 @@ function asBytes(value: unknown): Uint8Array | undefined {
 
 function readFailed(error: unknown): DslError {
   if (error instanceof DslError) return error;
-  return DslError.of('readFailed', 'Reading the input failed.', error);
+  return dslError('readFailed', 'Reading the input failed.', error);
 }
 
 function checkChunk(value: unknown, index: number): Uint8Array {
   const bytes = asBytes(value);
   if (bytes === undefined) {
-    throw DslError.of('invalidArgument', `Input chunk ${index} is not a Uint8Array.`);
+    throw dslError('invalidArgument', `Input chunk ${index} is not a Uint8Array.`);
   }
   return bytes;
 }
 
 /**
  * Wraps a source as an async sequence of byte chunks. Errors of the source become
- * `DslError` `DSL1001` with the original error as `cause`. Stopping early cancels the source.
+ * `DslError` `DSL1001` with the original error as `cause`. Stopping early cancels the source,
+ * and so does an abort of `signal`, even during a pending read (a stream is cancelled, an
+ * iterator returned); the sequence then just ends: reporting the abort is the caller's job.
  *
  * @throws DslError `DSL0001` if `source` is not a supported type (synchronously).
  */
-export function toByteChunks(source: Exclude<DslSource, string>): AsyncIterable<Uint8Array> {
+export function toByteChunks(
+  source: Exclude<DslSource, string>,
+  signal?: AbortSignal,
+): AsyncIterable<Uint8Array> {
   const bytes = asBytes(source);
-  if (bytes !== undefined) return fromIterator(() => [bytes][Symbol.iterator]());
+  if (bytes !== undefined) return fromIterator(() => [bytes][Symbol.iterator](), signal);
   if (isArrayBuffer(source)) {
     const view = new Uint8Array(source);
-    return fromIterator(() => [view][Symbol.iterator]());
+    return fromIterator(() => [view][Symbol.iterator](), signal);
   }
   if (isObject(source)) {
     if (typeof source.getReader === 'function') {
-      return fromReadableStream(source as unknown as ReadableStream<Uint8Array>);
+      return fromReadableStream(source as unknown as ReadableStream<Uint8Array>, signal);
     }
     if (typeof source.stream === 'function' && typeof source.arrayBuffer === 'function') {
       const blob = source as unknown as Blob;
       return {
-        [Symbol.asyncIterator]: () => fromReadableStream(blob.stream())[Symbol.asyncIterator](),
+        [Symbol.asyncIterator]: () =>
+          fromReadableStream(blob.stream(), signal)[Symbol.asyncIterator](),
       };
     }
     const asyncIterable = source as Partial<AsyncIterable<Uint8Array>>;
     if (typeof asyncIterable[Symbol.asyncIterator] === 'function') {
-      return fromIterator(() => (source as AsyncIterable<Uint8Array>)[Symbol.asyncIterator]());
+      return fromIterator(
+        () => (source as AsyncIterable<Uint8Array>)[Symbol.asyncIterator](),
+        signal,
+      );
     }
     const iterable = source as Partial<Iterable<Uint8Array>>;
     if (typeof iterable[Symbol.iterator] === 'function') {
-      return fromIterator(() => (source as Iterable<Uint8Array>)[Symbol.iterator]());
+      return fromIterator(() => (source as Iterable<Uint8Array>)[Symbol.iterator](), signal);
     }
   }
-  throw DslError.of(
+  throw dslError(
     'invalidArgument',
     'Unsupported input: expected a string, Uint8Array, ArrayBuffer, Blob, ReadableStream or ' +
       '(async) iterable of Uint8Array chunks.',
@@ -98,7 +106,9 @@ export function toByteChunks(source: Exclude<DslSource, string>): AsyncIterable<
 
 async function* fromIterator(
   open: () => Iterator<unknown> | AsyncIterator<unknown>,
+  signal: AbortSignal | undefined,
 ): AsyncGenerator<Uint8Array> {
+  if (signal?.aborted) return;
   let iterator: Iterator<unknown> | AsyncIterator<unknown>;
   try {
     iterator = open();
@@ -106,8 +116,13 @@ async function* fromIterator(
     throw readFailed(error);
   }
   let finished = false;
+  const unlisten = onAbort(signal, () => {
+    if (finished) return;
+    finished = true;
+    Promise.resolve(iterator.return?.()).catch(() => {});
+  });
   try {
-    for (let index = 0; ; index++) {
+    for (let index = 0; !(signal?.aborted ?? false); index++) {
       let result: IteratorResult<unknown>;
       try {
         result = await iterator.next();
@@ -122,11 +137,22 @@ async function* fromIterator(
       yield checkChunk(result.value, index);
     }
   } finally {
-    if (!finished) await iterator.return?.();
+    unlisten();
+    if (!finished) {
+      finished = true;
+      await iterator.return?.();
+    }
   }
 }
 
-async function* fromReadableStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
+async function* fromReadableStream(
+  stream: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+): AsyncGenerator<Uint8Array> {
+  if (signal?.aborted) {
+    await stream.cancel(signal.reason).catch(() => {});
+    return;
+  }
   let reader: ReadableStreamDefaultReader<Uint8Array>;
   try {
     reader = stream.getReader();
@@ -134,8 +160,14 @@ async function* fromReadableStream(stream: ReadableStream<Uint8Array>): AsyncGen
     throw readFailed(error);
   }
   let finished = false;
+  // Cancelling the reader settles a pending read, which then ends the loop.
+  const unlisten = onAbort(signal, () => {
+    if (finished) return;
+    finished = true;
+    reader.cancel(signal?.reason).catch(() => {});
+  });
   try {
-    for (let index = 0; ; index++) {
+    for (let index = 0; !(signal?.aborted ?? false); index++) {
       let result: ReadableStreamReadResult<Uint8Array>;
       try {
         result = await reader.read();
@@ -150,6 +182,7 @@ async function* fromReadableStream(stream: ReadableStream<Uint8Array>): AsyncGen
       yield checkChunk(result.value, index);
     }
   } finally {
+    unlisten();
     if (!finished) await reader.cancel().catch(() => {});
     reader.releaseLock();
   }

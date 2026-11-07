@@ -4,9 +4,9 @@
  */
 
 import {
+  type DecodeDslOptions,
   type DecodedText,
   type DecodeInfo,
-  type DecodeOptions,
   type Diagnostic,
   type DslSource,
   decodeDsl,
@@ -223,7 +223,7 @@ export interface Decoded {
 }
 
 /** Decodes a source completely. */
-export async function decodeAll(source: DslSource, options?: DecodeOptions): Promise<Decoded> {
+export async function decodeAll(source: DslSource, options?: DecodeDslOptions): Promise<Decoded> {
   const decoded: DecodedText = decodeDsl(source, options);
   const chunks: string[] = [];
   for await (const chunk of decoded) chunks.push(chunk);

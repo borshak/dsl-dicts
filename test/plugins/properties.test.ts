@@ -56,11 +56,14 @@ describe('built-in plugins, on arbitrary input', () => {
           subentries: plainOptions.subentries,
         });
         for (const entry of entries) {
-          for (const out of [toPlain(entry), toSearch(entry)]) {
+          const plain = toPlain(entry);
+          const search = toSearch(entry);
+          for (const out of [plain, search]) {
             expect(JSON.parse(JSON.stringify(out))).toEqual(out);
-            expect(out.headwords.every((h) => typeof h === 'string')).toBe(true);
             expect(out.text).not.toMatch(/^\n|\n$|\n\n/);
           }
+          expect(plain.headwords.every((h) => typeof h === 'string')).toBe(true);
+          expect(search.forms.every((h) => typeof h === 'string')).toBe(true);
         }
       }),
       RUNS,

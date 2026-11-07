@@ -4,37 +4,37 @@
  * @packageDocumentation
  */
 
+import { abortError, onAbort } from '../decode/abort.js';
 import {
-  type DecodedText,
+  createDecodedText,
+  type DecodeDslOptions,
+  type DecodedTextImpl,
   type DecodeInfo,
-  type DecodeOptions,
-  decodeDsl,
 } from '../decode/decode.js';
 import type { DslSource } from '../decode/source.js';
 import {
-  createStrictSink,
   type Diagnostic,
+  type DiagnosticCounts,
+  DiagnosticLog,
   type DiagnosticSink,
-  DslError,
+  diagnosticsLimitOf,
+  dslError,
+  optionsSink,
 } from '../diagnostics/index.js';
 import { createDecodedTextSegmenter, type Segmenter } from './segmenter.js';
 import type { DslHeader, RawEntry } from './types.js';
 
 /**
- * Options of {@link segmentDsl}: those of `decodeDsl`. The `diagnostics` sink and `strict`
- * apply to the diagnostics of both layers.
- *
- * @experimental
+ * Options of {@link segmentDsl}: those of `decodeDsl`. The `diagnostics` sink, `strict` and
+ * `diagnosticsLimit` apply to the diagnostics of both layers.
  */
-export type SegmentOptions = DecodeOptions;
+export type SegmentDslOptions = DecodeDslOptions;
 
 /**
  * A DSL file split into its header and raw entries.
  *
  * The entries can be read once, either one by one with {@link SegmentedDsl.entries} or in
  * batches with {@link SegmentedDsl.batches}.
- *
- * @experimental
  */
 export interface SegmentedDsl {
   /**
@@ -46,8 +46,14 @@ export interface SegmentedDsl {
   readonly header: Promise<DslHeader>;
   /** What the decoder found out about the input; see `DecodedText.info`. */
   readonly info: Promise<DecodeInfo>;
-  /** Every diagnostic of decoding and segmentation reported so far, in order. */
+  /**
+   * The diagnostics of decoding and segmentation reported so far, in order: the first
+   * `diagnosticsLimit` of them. The array is the same on every read and grows as diagnostics
+   * are reported.
+   */
   readonly diagnostics: readonly Diagnostic[];
+  /** How many diagnostics were reported so far, by code and severity, beyond the limit too. */
+  diagnosticCounts(): DiagnosticCounts;
   /**
    * The entries, one by one.
    *
@@ -60,28 +66,52 @@ export interface SegmentedDsl {
    *
    * @throws DslError `DSL0002` if the entries were already requested.
    */
-  batches(): AsyncIterable<RawEntry[]>;
+  batches(): AsyncIterable<readonly RawEntry[]>;
 }
 
 /**
- * Splits a DSL file into its header and raw entries: `decodeDsl` followed by the synchronous
- * segmenter of `createSegmenter`, whose rules apply.
+ * Splits a DSL file into its header and raw entries: `decodeDsl`, then a synchronous
+ * segmenter fed with the decoded text, chunk by chunk.
+ *
+ * Rules (Lingvo manual, with GoldenDict's tolerance where Lingvo would reject the file):
+ * - Comments `{{ … }}` are removed first, possibly across lines (see the comment rules of
+ *   the line reader: `\{{` is not a comment, `\` is not special inside one). A line that
+ *   held nothing but comments, spaces and tabs is dropped silently.
+ * - Spaces and tabs are the only whitespace: a line starting with any other character
+ *   (including U+00A0) is a headword or a directive. Blank means empty or spaces and tabs only.
+ * - The preamble is the leading `#` lines, with blank lines allowed between them. A `#` line
+ *   after the preamble is ignored with `DSL2006`, wherever it is; it does not end the entry.
+ *   A headword starting with `#` must be written `\#`.
+ * - Consecutive headword lines share the body: the indented lines that follow. Body lines
+ *   lose their indentation, which is kept in `indent`.
+ * - Blank lines between entries are normal. Blank lines between headwords, or between the
+ *   headwords and the body, are skipped and the headwords merge (`DSL2202`, as GoldenDict:
+ *   Lingvo rejects them). Blank lines inside a body are skipped and the body goes on
+ *   (`DSL2203`, GoldenDict's "orphan string").
+ * - Indented lines before the first headword are ignored (`DSL2201`). Headwords at the end of
+ *   input without a body still make an entry, with an empty body (`DSL2204`).
+ * - A body line whose first character, after spaces, tabs and tags, is an unescaped `@` is a
+ *   sub-entry marker: `subentry-start` if text other than closing tags follows, else
+ *   `subentry-end`. Consecutive start lines are headwords of one sub-entry. A start after
+ *   other lines of an open sub-entry closes it implicitly (`DSL2301`, like a sub-entry left
+ *   open at the end of the entry); an end without an open sub-entry gives `DSL2302`.
  *
  * Reading is lazy and streaming: input is read as entries are requested, and only the current
  * chunk of text is held. Problems are reported as diagnostics; with `strict`, the first one of
- * severity `error` stops reading with a `DslError`.
+ * the strict severity stops reading with a `DslError`.
  *
  * @throws DslError synchronously for invalid arguments, like `decodeDsl`.
- * @experimental
  */
-export function segmentDsl(source: DslSource, options: SegmentOptions = {}): SegmentedDsl {
+export function segmentDsl(source: DslSource, options: SegmentDslOptions = {}): SegmentedDsl {
   return new SegmentedDslImpl(source, options);
 }
 
-class SegmentedDslImpl implements SegmentedDsl {
-  readonly diagnostics: Diagnostic[] = [];
-  readonly #decoded: DecodedText;
+/** The result of {@link segmentDsl}, with its internals. Internal. */
+export class SegmentedDslImpl implements SegmentedDsl {
+  readonly #log: DiagnosticLog;
+  readonly #decoded: DecodedTextImpl;
   readonly #segmenter: Segmenter;
+  readonly #unlisten: () => void;
   #source: AsyncIterator<string> | undefined;
   readonly #header: Promise<DslHeader>;
   #resolveHeader: (header: DslHeader) => void = () => {};
@@ -95,21 +125,27 @@ class SegmentedDslImpl implements SegmentedDsl {
   #error: unknown;
   #inflight: Promise<void> | undefined;
   #consumed = false;
+  /** Reading was aborted or cancelled: what a pending read brings is dropped. */
+  #stopped = false;
 
-  constructor(source: DslSource, options: SegmentOptions) {
+  constructor(source: DslSource, options: SegmentDslOptions) {
     if (typeof options !== 'object' || options === null) {
-      throw DslError.of('invalidArgument', 'Options must be an object.');
+      throw dslError('invalidArgument', 'Options must be an object.');
     }
-    const outer: DiagnosticSink | undefined = options.strict
-      ? createStrictSink(options.diagnostics)
-      : options.diagnostics;
+    const outer = optionsSink(options);
+    this.#log = new DiagnosticLog(diagnosticsLimitOf(options.diagnosticsLimit));
     const sink: DiagnosticSink = {
       report: (diagnostic) => {
-        this.diagnostics.push(diagnostic);
+        this.#log.record(diagnostic);
         outer?.report(diagnostic);
       },
     };
-    this.#decoded = decodeDsl(source, { ...options, strict: false, diagnostics: sink });
+    this.#decoded = createDecodedText(source, {
+      ...options,
+      strict: false,
+      diagnostics: sink,
+      diagnosticsLimit: 0,
+    });
     this.#segmenter = createDecodedTextSegmenter({ diagnostics: sink });
     this.#header = new Promise<DslHeader>((resolve, reject) => {
       this.#resolveHeader = resolve;
@@ -117,6 +153,31 @@ class SegmentedDslImpl implements SegmentedDsl {
     });
     // Rejections reach whoever awaits `header`; nobody else needs to handle them.
     this.#header.catch(() => {});
+    const { signal } = options;
+    // The decoder fails the reads in progress; this fails the header when nothing is read.
+    this.#unlisten = onAbort(signal, () => {
+      if (this.#done || signal === undefined) return;
+      this.#stopped = true;
+      const error = abortError(signal);
+      this.#queue = [];
+      this.#head = 0;
+      this.#failed = true;
+      this.#error = error;
+      this.#finish(error);
+    });
+  }
+
+  get diagnostics(): readonly Diagnostic[] {
+    return this.#log.kept;
+  }
+
+  diagnosticCounts(): DiagnosticCounts {
+    return this.#log.counts();
+  }
+
+  /** The decoding info if it is already known, without reading. Internal. */
+  get knownInfo(): DecodeInfo | undefined {
+    return this.#decoded.knownInfo;
   }
 
   get header(): Promise<DslHeader> {
@@ -155,9 +216,9 @@ class SegmentedDslImpl implements SegmentedDsl {
     return { [Symbol.asyncIterator]: () => iterator };
   }
 
-  batches(): AsyncIterable<RawEntry[]> {
+  batches(): AsyncIterable<readonly RawEntry[]> {
     this.#consume();
-    const iterator: AsyncIterator<RawEntry[]> = {
+    const iterator: AsyncIterator<readonly RawEntry[]> = {
       next: async () => {
         const batch = await this.#nextBatch();
         return batch === undefined
@@ -174,7 +235,7 @@ class SegmentedDslImpl implements SegmentedDsl {
 
   #consume(): void {
     if (this.#consumed) {
-      throw DslError.of('alreadyConsumed', 'The entries can be read only once.');
+      throw dslError('alreadyConsumed', 'The entries can be read only once.');
     }
     this.#consumed = true;
   }
@@ -192,12 +253,15 @@ class SegmentedDslImpl implements SegmentedDsl {
   }
 
   async #pullOnce(): Promise<void> {
+    if (this.#done) return;
     try {
       this.#source ??= this.#decoded[Symbol.asyncIterator]();
       const result = await this.#source.next();
+      if (this.#stopped) return;
       let batch: RawEntry[];
       if (result.done) {
         this.#done = true;
+        this.#unlisten();
         batch = this.#segmenter.end();
       } else {
         batch = this.#segmenter.push(result.value);
@@ -209,6 +273,7 @@ class SegmentedDslImpl implements SegmentedDsl {
         this.#resolveHeader(header);
       }
     } catch (error) {
+      if (this.#stopped) return;
       this.#failed = true;
       this.#error = error;
       this.#finish(error);
@@ -217,6 +282,7 @@ class SegmentedDslImpl implements SegmentedDsl {
 
   #finish(error: unknown): void {
     this.#done = true;
+    this.#unlisten();
     if (!this.#headerSettled) {
       this.#headerSettled = true;
       this.#rejectHeader(error);
@@ -244,7 +310,8 @@ class SegmentedDslImpl implements SegmentedDsl {
     this.#queue = [];
     this.#head = 0;
     if (this.#done) return;
-    this.#finish(DslError.of('cancelled', 'Reading was stopped before the header was complete.'));
+    this.#stopped = true;
+    this.#finish(dslError('cancelled', 'Reading was stopped before the header was complete.'));
     // Let a pending read settle before closing the source.
     await this.#inflight;
     await this.#source?.return?.();

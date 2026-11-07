@@ -34,8 +34,6 @@ export type CompanionKind = keyof typeof COMPANION_SUFFIXES;
  * ```ts
  * dictionaryBaseName('/dicts/en-ru.dsl.dz'); // 'en-ru'
  * ```
- *
- * @experimental
  */
 export function dictionaryBaseName(path: string): string {
   const name = basename(path);

@@ -502,6 +502,7 @@ export function findLanguageById(id: number): LanguageInfo | undefined {
  * Result of {@link resolveLanguageName}.
  */
 export interface LanguageMatch {
+  /** The language the name resolves to. */
   readonly language: LanguageInfo;
   /** The name is the exact Lingvo name; `false` if it was resolved leniently. */
   readonly exact: boolean;

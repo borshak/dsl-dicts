@@ -1,6 +1,10 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { createCollectingSink, MAX_VARIANTS, parseHeadword } from '../../src/index.js';
+import { createCollectingSink, parseHeadword } from '../../src/index.js';
+
+/** The documented cap of index forms (`DSL3203`). */
+const MAX_VARIANTS = 256;
+
 import { markupText } from '../markup/arbitraries.js';
 import { stripPositions } from '../markup/helpers.js';
 

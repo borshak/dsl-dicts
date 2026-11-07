@@ -50,9 +50,9 @@ describe('convert: a file to standard output', () => {
     ['article', 'article'],
     ['plain-text', 'plain-text'],
     ['search-text', 'search-text'],
-  ])('exports the %s view', async (view, name) => {
+  ])('exports the output of the built-in %s plugin', async (plugin, name) => {
     const dir = dictionary();
-    const { code, stdout } = await run(['convert', 'a.dsl', '--view', view], dir);
+    const { code, stdout } = await run(['convert', 'a.dsl', '--plugin', plugin], dir);
     expect(code).toBe(0);
     const { header, records: list } = await records(stdout);
     expect(header.plugin?.name).toBe(name);
@@ -61,7 +61,7 @@ describe('convert: a file to standard output', () => {
 
   it('passes --plugin-options to a built-in plugin, with the companions loaded', async () => {
     const dir = dictionary({ 'a.dsl': `${DICT}rat\n\t[p]n[/p] x\n`, 'a_abrv.dsl': ABRV });
-    const args = ['convert', 'a.dsl', '--view', 'plain-text', '--plugin-options'];
+    const args = ['convert', 'a.dsl', '--plugin', 'plain-text', '--plugin-options'];
     const withLabels = await run([...args, '{"expandLabels":true}'], dir);
     expect((await records(withLabels.stdout)).records.at(-1)).toMatchObject({
       data: { text: 'существительное x' },
@@ -73,7 +73,7 @@ describe('convert: a file to standard output', () => {
   it('writes one JSON document with --format json, indented with --pretty', async () => {
     const dir = dictionary();
     const compact = await run(
-      ['convert', 'a.dsl', '--format', 'json', '--view', 'plain-text'],
+      ['convert', 'a.dsl', '--format', 'json', '--plugin', 'plain-text'],
       dir,
     );
     const doc = JSON.parse(compact.stdout);
@@ -83,7 +83,7 @@ describe('convert: a file to standard output', () => {
       { headwords: ['dog'], text: 'n. собака' },
     ]);
     const pretty = await run(
-      ['convert', 'a.dsl', '--format', 'json', '--view', 'plain-text', '--pretty'],
+      ['convert', 'a.dsl', '--format', 'json', '--plugin', 'plain-text', '--pretty'],
       dir,
     );
     expect(pretty.stdout).toBe(`${JSON.stringify(doc, null, 2)}\n`);
@@ -91,8 +91,8 @@ describe('convert: a file to standard output', () => {
 
   it('ends with a summary when asked: entries and diagnostics by code', async () => {
     const dir = dictionary({ 'a.dsl': NOISY, 'a_abrv.dsl': `${ABRV}n\n\tagain\n` });
-    for (const view of ['ast', 'article']) {
-      const { stdout } = await run(['convert', 'a.dsl', '--summary', '--view', view], dir);
+    for (const plugin of [[], ['--plugin', 'article']]) {
+      const { stdout } = await run(['convert', 'a.dsl', '--summary', ...plugin], dir);
       const { records: list } = await records(stdout);
       // The companion's DSL6001 and the entry's DSL4202, though the output is not the AST.
       expect(list.at(-1)).toEqual({
@@ -117,10 +117,10 @@ describe('convert: a file to standard output', () => {
   it('lets --encoding override detection, and --default-encoding set the fallback', async () => {
     const dir = dictionary({ 'u.dsl': '#NAME "n"\nпривет\n\tмир\n' });
     const text = (r: { stdout: string }) => records(r.stdout);
-    const auto = await text(await run(['convert', 'u.dsl', '--view', 'plain-text'], dir));
+    const auto = await text(await run(['convert', 'u.dsl', '--plugin', 'plain-text'], dir));
     expect(auto.records[0]).toMatchObject({ data: { headwords: ['привет'] } });
     const forced = await text(
-      await run(['convert', 'u.dsl', '--view', 'plain-text', '--encoding', 'cp1251'], dir),
+      await run(['convert', 'u.dsl', '--plugin', 'plain-text', '--encoding', 'cp1251'], dir),
     );
     expect(forced.header.decode).toMatchObject({ encoding: 'windows-1251', source: 'option' });
     expect(forced.records[0]).not.toMatchObject({ data: { headwords: ['привет'] } });
@@ -129,7 +129,7 @@ describe('convert: a file to standard output', () => {
     writeFiles(dir, { 'c.dsl': bytes });
     const fallback = await text(
       await run(
-        ['convert', 'c.dsl', '--view', 'plain-text', '--default-encoding', 'Cyrillic'],
+        ['convert', 'c.dsl', '--plugin', 'plain-text', '--default-encoding', 'Cyrillic'],
         dir,
       ),
     );
@@ -160,7 +160,7 @@ describe('convert: a file to a file', () => {
   it('writes <base>.<view>.jsonl into an -o that is a directory', async () => {
     const dir = dictionary();
     await mkdir(join(dir, 'existing'));
-    await run(['convert', 'a.dsl', '-o', 'existing', '--view', 'article'], dir);
+    await run(['convert', 'a.dsl', '-o', 'existing', '--plugin', 'article'], dir);
     await run(['convert', 'a.dsl', '-o', 'fresh/', '--format', 'json'], dir);
     expect(existsSync(join(dir, 'existing/a.article.jsonl'))).toBe(true);
     expect(existsSync(join(dir, 'fresh/a.ast.json'))).toBe(true);
@@ -183,7 +183,7 @@ describe('convert: diagnostics', () => {
 
   it('prints each with its position when --verbose, and nothing when --quiet', async () => {
     const dir = dictionary({ 'a.dsl': NOISY });
-    const verbose = await run(['convert', 'a.dsl', '--verbose', '--view', 'plain-text'], dir);
+    const verbose = await run(['convert', 'a.dsl', '--verbose', '--plugin', 'plain-text'], dir);
     expect(verbose.stderr).toMatch(/^a\.dsl:9:\d+: warning DSL4202 .+\n$/);
     const quiet = await run(['convert', 'a.dsl', '--quiet'], dir);
     expect(quiet.stderr).toBe('');
@@ -250,7 +250,7 @@ describe('convert: a directory', () => {
 
   it('converts each dictionary once to <base>.<view>.jsonl', async () => {
     const dir = dictionary(files);
-    const { code, stderr } = await run(['convert', '.', '-o', 'out', '--view', 'article'], dir);
+    const { code, stderr } = await run(['convert', '.', '-o', 'out', '--plugin', 'article'], dir);
     expect(code).toBe(0);
     expect((await readdir(join(dir, 'out'))).sort()).toEqual([
       'a.article.jsonl',
@@ -371,13 +371,14 @@ describe('convert: plugins from a module', () => {
     }
   });
 
-  it('exits 3 for options a built-in plugin refuses', async () => {
+  it('exits 1 for options a plugin refuses (DSL0001)', async () => {
     const dir = dictionary();
     const { code, stderr } = await run(
-      ['convert', 'a.dsl', '--view', 'plain-text', '--plugin-options', '{"bogus":1}'],
+      ['convert', 'a.dsl', '--plugin', 'plain-text', '--plugin-options', '{"bogus":1}'],
       dir,
     );
-    expect(code).toBe(3);
+    expect(code).toBe(1);
+    expect(stderr).toContain('DSL0001');
     expect(stderr).toContain('plain-text');
   });
 });
@@ -387,10 +388,13 @@ describe('convert: usage errors (exit 1)', () => {
     [['convert']],
     [['convert', 'a.dsl', 'b.dsl']],
     [['convert', 'a.dsl', '--format', 'xml']],
-    [['convert', 'a.dsl', '--view', 'html']],
-    [['convert', 'a.dsl', '--view', 'article', '--plugin', 'p.mjs']],
+    [['convert', 'a.dsl', '--plugin', 'html']],
+    [['convert', 'a.dsl', '--plugin', 'ast']],
+    [['convert', 'a.dsl', '--plugin', '']],
+    [['convert', 'a.dsl', '--strict=fatal']],
+    [['convert', 'a.dsl', '--strict=']],
     [['convert', 'a.dsl', '--plugin-options', '{}']],
-    [['convert', 'a.dsl', '--view', 'article', '--plugin-options', '{nope']],
+    [['convert', 'a.dsl', '--plugin', 'article', '--plugin-options', '{nope']],
     [['convert', 'a.dsl', '--pretty']],
     [['convert', 'a.dsl', '--verbose', '--quiet']],
     [['convert', 'a.dsl', '--bogus']],
@@ -402,6 +406,64 @@ describe('convert: usage errors (exit 1)', () => {
     expect(stdout).toBe('');
     expect(stderr).toMatch(/^dsl-dicts: /);
     expect(stderr).toContain('--help');
+  });
+});
+
+describe('convert: companion paths and strictness', () => {
+  it('reads the abbreviations and the annotation from explicit paths', async () => {
+    const dir = dictionary({
+      'a.dsl': `${DICT}rat\n\t[p]n[/p] x\n`,
+      'elsewhere/labels.dsl': ABRV,
+      'elsewhere/notes.ann': '#LANGUAGE "English"\nElsewhere.\n',
+    });
+    const options = ['--plugin', 'plain-text', '--plugin-options', '{"expandLabels":true}'];
+    for (const extra of [[], ['--no-companions']]) {
+      const { code, stdout } = await run(
+        ['convert', 'a.dsl', ...options, '--abbreviations', 'elsewhere/labels.dsl', ...extra],
+        dir,
+      );
+      expect(code).toBe(0);
+      expect((await records(stdout)).records.at(-1)).toMatchObject({
+        data: { text: 'существительное x' },
+      });
+    }
+    const info = await run(
+      ['info', 'a.dsl', '--format', 'json', '--annotation', 'elsewhere/notes.ann'],
+      dir,
+    );
+    expect(JSON.parse(info.stdout).files.annotation).toBe(join(dir, 'elsewhere/notes.ann'));
+    const missing = await run(['convert', 'a.dsl', '--abbreviations', 'nope.dsl'], dir);
+    expect(missing.code).toBe(0);
+    expect(missing.stderr).toContain('DSL6102');
+  });
+
+  it('fails from the severity of --strict=<severity> on', async () => {
+    // DSL4202 (an unclosed tag) is a warning.
+    const dir = dictionary({ 'a.dsl': NOISY });
+    expect((await run(['convert', 'a.dsl', '--strict'], dir)).code).toBe(0);
+    expect((await run(['convert', 'a.dsl', '--strict=error'], dir)).code).toBe(0);
+    const warning = await run(['convert', 'a.dsl', '--strict=warning'], dir);
+    expect(warning.code).toBe(2);
+    expect(warning.stderr).toContain('DSL4202');
+    expect((await run(['convert', 'a.dsl', '--strict=info', '-q'], dir)).code).toBe(2);
+    // After --, it is a path.
+    expect((await run(['convert', '--', '--strict=info'], dir)).code).toBe(2);
+  });
+});
+
+describe('convert: internal errors', () => {
+  it('exit 70, with the stack', async () => {
+    const dir = dictionary();
+    const stdout = new Writable({
+      write() {
+        throw new TypeError('a bug');
+      },
+    });
+    const stderr = new Capture();
+    const code = await runCli(['convert', 'a.dsl'], { stdout, stderr, cwd: dir });
+    expect(code).toBe(70);
+    expect(stderr.text).toContain('internal error');
+    expect(stderr.text).toContain('TypeError: a bug');
   });
 });
 

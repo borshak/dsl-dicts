@@ -20,7 +20,12 @@ function drained(stream: Writable): Promise<void> {
       else reject(error);
     };
     const onDrain = (): void => done();
-    const onClose = (): void => done(new Error('The output stream was closed.'));
+    const onClose = (): void =>
+      done(
+        Object.assign(new Error('The output stream was closed.'), {
+          code: 'ERR_STREAM_PREMATURE_CLOSE',
+        }),
+      );
     stream.on('drain', onDrain);
     stream.on('error', done);
     stream.on('close', onClose);

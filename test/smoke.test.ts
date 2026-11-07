@@ -15,8 +15,8 @@ describe('package skeleton', () => {
     expect(core.VERSION).toBe(pkg.version);
   });
 
-  it('node entry builds on the core', () => {
-    expect(node.describeRuntime()).toBe(`${core.VERSION} (node)`);
+  it('node entry is importable', () => {
+    expect(typeof node.openDsl).toBe('function');
   });
 
   it('article and plugins entries are importable', () => {

@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { createDiagnostic, type Diagnostic, DslError } from '../diagnostics/index.js';
+import { createDiagnostic, type Diagnostic, dslError } from '../diagnostics/index.js';
 
 /**
  * Decompression mode.
@@ -12,8 +12,6 @@ import { createDiagnostic, type Diagnostic, DslError } from '../diagnostics/inde
  * - `auto`: decompress if the input starts with the gzip magic bytes `1F 8B`.
  * - `gzip`: the input must be gzip; anything else is reported as `DSL1101`.
  * - `none`: never decompress.
- *
- * @experimental
  */
 export type DecompressMode = 'auto' | 'gzip' | 'none';
 
@@ -97,7 +95,7 @@ export async function* decompress(
     }
     status.compressed = true;
     if (typeof DecompressionStream !== 'function') {
-      throw DslError.of(
+      throw dslError(
         'decompressionUnavailable',
         'The input is gzip-compressed, but this runtime has no DecompressionStream.',
       );

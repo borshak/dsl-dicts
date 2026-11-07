@@ -55,7 +55,7 @@ describe('plain-text plugin', () => {
     const entries = await entriesOf("w\n\tпров[']и[/']нция\n");
     expect(run(entries)[0]?.text).toBe('провинция');
     expect(run(entries, { stress: 'combining' })[0]?.text).toBe('прови\u0301нция');
-    expect(thrown(() => run(entries, { stress: 'x' as never }))).toMatchObject({ code: 'DSL5001' });
+    expect(thrown(() => run(entries, { stress: 'x' as never }))).toMatchObject({ code: 'DSL0001' });
   });
 
   it('expands labels from the context abbreviations when asked', async () => {
@@ -64,6 +64,9 @@ describe('plain-text plugin', () => {
     expect(run(entries, { expandLabels: true }, abbreviations)[0]?.text).toContain('1) noun tint');
     expect(run(entries, {}, abbreviations)[0]?.text).toContain('1) n tint');
     expect(run(entries, { expandLabels: true })[0]?.text).toContain('1) n tint');
+    expect(run(entries, { expandLabels: true, labels: false }, abbreviations)[0]?.text).toContain(
+      '1) tint',
+    );
     // Headwords keep their label as written: they are Headword.text.
     expect(run(entries, { expandLabels: true }, abbreviations)[0]?.headwords[1]).toBe('n hue');
   });
@@ -79,10 +82,11 @@ describe('plain-text plugin', () => {
     const error = await collect(
       parseDsl(HEADER + DICT).entries({ plugin: plainText, options: { indnet: ' ' } as never }),
     ).catch((e: unknown) => e);
+    // An invalid option stays a DSL0001, with the plugin named.
     expect(error).toMatchObject({
-      code: 'DSL5001',
+      code: 'DSL0001',
       plugin: 'plain-text',
-      cause: { code: 'DSL0001', message: 'The plain-text plugin has no option indnet.' },
+      message: 'Plugin plain-text@1.0.0: The plain-text plugin has no option indnet.',
     });
     const context = createDictionaryContext();
     expect(() => setupPlugin(plainText, context, 'x' as never)).toThrow(

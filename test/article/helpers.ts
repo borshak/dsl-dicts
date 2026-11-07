@@ -2,7 +2,12 @@
  * Test helpers for the article plugin. Web-standard APIs only.
  */
 
-import { type Article, type ArticleOptions, article, type Sense } from '../../src/article/index.js';
+import {
+  type Article,
+  type ArticlePluginOptions,
+  article,
+  type Sense,
+} from '../../src/article/index.js';
 import { createDictionaryContext, type DslPlugin, parseDsl, setupPlugin } from '../../src/index.js';
 import { collect, deepFreeze, HEADER } from '../plugin/helpers.js';
 
@@ -10,7 +15,7 @@ export { collect, deepFreeze, HEADER };
 
 export interface RunInit {
   readonly abbreviations?: ReadonlyMap<string, string>;
-  readonly plugin?: DslPlugin<Article, ArticleOptions | undefined>;
+  readonly plugin?: DslPlugin<Article, ArticlePluginOptions | undefined>;
   /** The header lines; default `HEADER` (English to Russian). */
   readonly header?: string;
 }
@@ -18,7 +23,7 @@ export interface RunInit {
 /** The articles of a dictionary (the header is prepended), built from deeply frozen entries. */
 export async function articlesOf(
   entries: string,
-  options?: ArticleOptions,
+  options?: ArticlePluginOptions,
   init: RunInit = {},
 ): Promise<Article[]> {
   const dict = parseDsl((init.header ?? HEADER) + entries, { positions: false });
@@ -33,7 +38,7 @@ export async function articlesOf(
 /** The article of a one-entry dictionary. */
 export async function articleOf(
   text: string,
-  options?: ArticleOptions,
+  options?: ArticlePluginOptions,
   init: RunInit = {},
 ): Promise<Article> {
   const [first, ...rest] = await articlesOf(text, options, init);

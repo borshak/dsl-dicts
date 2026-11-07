@@ -7,30 +7,33 @@
 import { openAsBlob } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { createDiagnostic } from '../diagnostics/index.js';
+import { abortError, checkSignal } from '../decode/abort.js';
+import {
+  CATALOG,
+  createDiagnostic,
+  type DiagnosticName,
+  DslError,
+  dslError,
+} from '../diagnostics/index.js';
 import {
   type Annotation,
   type BodyLine,
   createDictionaryContext,
   type Diagnostic,
-  type DiagnosticName,
   type DiagnosticSink,
   type DslEntry,
-  DslError,
+  type DslFiles,
   type ParseDslOptions,
   type ParsedDsl,
-  type PluginUse,
   parseAbbreviations,
   parseAnnotation,
-  parseDsl,
 } from '../index.js';
+import { parseDslWith } from '../parse/parse.js';
 import { type CompanionKind, dictionaryBaseName, findCompanion } from './names.js';
 
 /**
  * Which companion files `openDsl` looks for and loads. `true` (the default) is all, `false`
  * is none; with an object, the kinds that are left out are on.
- *
- * @experimental
  */
 export type CompanionSelection =
   | boolean
@@ -49,13 +52,15 @@ export type CompanionSelection =
  * Explicit paths of companion files, used instead of looking next to the dictionary. A path
  * is resolved against the current directory; a file that does not exist is reported
  * (`DSL6102`) and left out.
- *
- * @experimental
  */
 export interface CompanionPaths {
+  /** The abbreviations file, read with `parseAbbreviations`. */
   readonly abbreviations?: string;
+  /** The annotation file, read with `parseAnnotation`. */
   readonly annotation?: string;
+  /** The icon, only reported in `files`. */
   readonly icon?: string;
+  /** The media archive, only reported in `files`. */
   readonly media?: string;
 }
 
@@ -66,9 +71,7 @@ export interface CompanionPaths {
  * used as is, and the file of that kind is neither looked for nor read. `encoding`,
  * `decompress` and `strict` apply to the dictionary only: companion files are decoded with
  * automatic detection (and `defaultEncoding`), and their problems are always diagnostics,
- * never errors.
- *
- * @experimental
+ * never errors. `signal` cancels the reading of both.
  */
 export interface OpenDslOptions extends ParseDslOptions {
   /** Which companion files to look for and load. Default `true`. */
@@ -77,31 +80,12 @@ export interface OpenDslOptions extends ParseDslOptions {
   readonly paths?: CompanionPaths;
 }
 
-/**
- * The files of an opened dictionary, as absolute paths.
- *
- * @experimental
- */
-export interface DslFiles {
-  /** The dictionary file. */
-  readonly dictionary: string;
-  /** The abbreviations file (`<base>_abrv.dsl`, ...), if found. */
-  readonly abbreviations?: string;
-  /** The annotation file (`<base>.ann`), if found. */
-  readonly annotation?: string;
-  /** The icon (`<base>.bmp`), if found. */
-  readonly icon?: string;
-  /** The media archive (`<base>.dsl.files.zip`), if found; not read. */
-  readonly media?: string;
-}
-
-/**
- * An opened dictionary: what `parseDsl` returns, plus the companion files.
- *
- * @experimental
- */
+/** An opened dictionary: what `parseDsl` returns, plus the companion files. */
 export interface OpenedDsl<TEntry = DslEntry> extends ParsedDsl<TEntry> {
-  /** The files that were found, or named in the options. */
+  /**
+   * The files that were found, or named in the options, as absolute paths; plugins receive
+   * them as `DictionaryContext.files`.
+   */
   readonly files: DslFiles;
   /** The abbreviations, from `files.abbreviations` or the options; absent if there are none. */
   readonly abbreviations?: ReadonlyMap<string, string>;
@@ -128,7 +112,7 @@ const KINDS: readonly CompanionKind[] = ['abbreviations', 'annotation', 'icon', 
  * upper case. A missing companion is normal and not reported. One that cannot be read or
  * decoded is reported as a diagnostic (`DSL6101`) and left out; so is a companion named in the
  * `paths` option that does not exist (`DSL6102`). The diagnostics of reading the companions
- * come first in `diagnostics` and go to the `diagnostics` sink.
+ * come first in `diagnostics` and in the counts, and go to the `diagnostics` sink.
  *
  * Besides what `parseDsl` returns, the result has the `files` found and the loaded
  * `abbreviations` and `annotation`, which plugins receive in their context.
@@ -141,43 +125,37 @@ const KINDS: readonly CompanionKind[] = ['abbreviations', 'annotation', 'icon', 
  * ```
  *
  * @throws DslError `DSL0001` for invalid arguments, `DSL1001` if the dictionary file cannot
- * be opened.
- * @experimental
+ * be opened, `DSL0003` if the `signal` aborts while the companion files are read.
  */
 export async function openDsl(
   path: string,
   options: OpenDslOptions & { readonly body: 'raw' },
 ): Promise<OpenedDsl<DslEntry<readonly BodyLine[]>>>;
-export async function openDsl(
-  path: string,
-  options?: OpenDslOptions & { readonly body?: 'ast' },
-): Promise<OpenedDsl<DslEntry>>;
-export async function openDsl(
-  path: string,
-  options?: OpenDslOptions,
-): Promise<OpenedDsl<DslEntry | DslEntry<readonly BodyLine[]>>>;
+export async function openDsl(path: string, options?: OpenDslOptions): Promise<OpenedDsl<DslEntry>>;
 export async function openDsl(
   path: string,
   options: OpenDslOptions = {},
 ): Promise<OpenedDsl<DslEntry | DslEntry<readonly BodyLine[]>>> {
   if (typeof path !== 'string' || path.length === 0) {
-    throw DslError.of('invalidArgument', 'The path must be a non-empty string.');
+    throw dslError('invalidArgument', 'The path must be a non-empty string.');
   }
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
+    throw dslError('invalidArgument', 'Options must be an object.');
   }
   const { companions = true, paths = {}, ...parseOptions } = options;
   const wanted = selectCompanions(companions);
   if (typeof paths !== 'object' || paths === null) {
-    throw DslError.of('invalidArgument', 'The paths option must be an object.');
+    throw dslError('invalidArgument', 'The paths option must be an object.');
   }
   for (const kind of KINDS) {
     if (paths[kind] !== undefined && typeof paths[kind] !== 'string') {
-      throw DslError.of('invalidArgument', `The path of the ${kind} must be a string.`);
+      throw dslError('invalidArgument', `The path of the ${kind} must be a string.`);
     }
   }
+  const signal = checkSignal(options.signal);
   const dictionary = resolve(path);
   const blob = await openDictionary(dictionary);
+  if (signal?.aborted) throw abortError(signal);
 
   const diagnostics: Diagnostic[] = [];
   const outer = options.diagnostics;
@@ -198,6 +176,7 @@ export async function openDsl(
   const found = await locate(dictionary, paths, wanted, given, report);
   const companionOptions = {
     ...(options.defaultEncoding === undefined ? {} : { defaultEncoding: options.defaultEncoding }),
+    ...(signal === undefined ? {} : { signal }),
     diagnostics: sink,
   };
   const [abbreviations, annotation] = await Promise.all([
@@ -209,11 +188,18 @@ export async function openDsl(
       : load(found.annotation, parseAnnotation, companionOptions, report),
   ] as const);
 
-  const parsed = parseDsl(blob, {
-    ...parseOptions,
-    ...(abbreviations === undefined ? {} : { abbreviations }),
-    ...(annotation === undefined ? {} : { annotation }),
-  });
+  if (signal?.aborted) throw abortError(signal);
+
+  const files: DslFiles = Object.freeze({ dictionary, ...found });
+  const parsed = parseDslWith(
+    blob,
+    {
+      ...parseOptions,
+      ...(abbreviations === undefined ? {} : { abbreviations }),
+      ...(annotation === undefined ? {} : { annotation }),
+    },
+    { preface: diagnostics, files },
+  ) as ParsedDsl;
   const opened: OpenedDsl<DslEntry | DslEntry<readonly BodyLine[]>> = {
     get header() {
       return parsed.header;
@@ -221,18 +207,16 @@ export async function openDsl(
     get info() {
       return parsed.info;
     },
-    get diagnostics() {
-      return [...diagnostics, ...parsed.diagnostics];
+    get bodyMode() {
+      return parsed.bodyMode;
     },
-    entries: ((use?: PluginUse<unknown, unknown>) =>
-      use === undefined
-        ? parsed.entries()
-        : (parsed as ParsedDsl).entries(use)) as OpenedDsl['entries'],
-    batches: ((use?: PluginUse<unknown, unknown>) =>
-      use === undefined
-        ? parsed.batches()
-        : (parsed as ParsedDsl).batches(use)) as OpenedDsl['batches'],
-    files: Object.freeze({ dictionary, ...found }),
+    get diagnostics() {
+      return parsed.diagnostics;
+    },
+    diagnosticCounts: () => parsed.diagnosticCounts(),
+    entries: parsed.entries.bind(parsed) as OpenedDsl['entries'],
+    batches: parsed.batches.bind(parsed) as OpenedDsl['batches'],
+    files,
     ...(abbreviations === undefined ? {} : { abbreviations }),
     ...(annotation === undefined
       ? {}
@@ -251,7 +235,7 @@ function selectCompanions(companions: unknown): Record<CompanionKind, boolean> {
     };
   }
   if (typeof companions !== 'object' || companions === null) {
-    throw DslError.of('invalidArgument', 'The companions option must be a boolean or an object.');
+    throw dslError('invalidArgument', 'The companions option must be a boolean or an object.');
   }
   const selection = companions as Partial<Record<CompanionKind, unknown>>;
   const result = { abbreviations: true, annotation: true, icon: true, media: true };
@@ -259,7 +243,7 @@ function selectCompanions(companions: unknown): Record<CompanionKind, boolean> {
     const value = selection[kind];
     if (value === undefined) continue;
     if (typeof value !== 'boolean') {
-      throw DslError.of('invalidArgument', `The companions.${kind} option must be a boolean.`);
+      throw dslError('invalidArgument', `The companions.${kind} option must be a boolean.`);
     }
     result[kind] = value;
   }
@@ -272,7 +256,7 @@ async function openDictionary(file: string): Promise<Blob> {
     if (!(await stat(file)).isFile()) throw new Error('not a file');
     return await openAsBlob(file);
   } catch (error) {
-    throw DslError.of('readFailed', `Cannot open the dictionary file ${file}.`, error);
+    throw dslError('readFailed', `Cannot open the dictionary file ${file}.`, error);
   }
 }
 
@@ -342,6 +326,8 @@ async function load<TResult, TOptions>(
   try {
     return await parse(await openAsBlob(file), options);
   } catch (error) {
+    // An abort of the signal is not a problem of the file.
+    if (error instanceof DslError && error.code === CATALOG.cancelled.code) throw error;
     report('companionUnreadable', `Cannot read the companion file ${file}.`, error);
     return undefined;
   }

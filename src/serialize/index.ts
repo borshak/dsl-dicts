@@ -22,5 +22,4 @@ export {
   parseJsonlHeader,
   readJsonl,
 } from './read.js';
-export { createDiagnosticTally, type DiagnosticTally } from './tally.js';
 export { type ToJsonlOptions, type ToJsonOptions, toJson, toJsonl } from './write.js';

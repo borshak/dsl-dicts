@@ -15,7 +15,11 @@
  * @packageDocumentation
  */
 
-/** Functional group of a tag. */
+/**
+ * Functional group of a tag.
+ *
+ * @experimental The tag registry may gain fields and values in a minor version.
+ */
 export type TagKind =
   /** Text formatting: bold, color, margin, ... */
   | 'format'
@@ -41,10 +45,16 @@ export type TagKind =
  * - `lang`: `id=<number>` or `name="<LingvoName>"`.
  * - `ref`: optional `dict="<dictionary name>"` or undocumented `target="<headword>"`.
  * - `url`: optional undocumented `target="<address>"`.
+ *
+ * @experimental The tag registry may gain fields and values in a minor version.
  */
 export type TagAttrs = 'none' | 'color' | 'level' | 'lang' | 'ref' | 'url';
 
-/** Origin of a tag. */
+/**
+ * Origin of a tag.
+ *
+ * @experimental The tag registry may gain fields and values in a minor version.
+ */
 export type TagDialect =
   /** Documented by ABBYY Lingvo. */
   | 'lingvo'
@@ -53,7 +63,11 @@ export type TagDialect =
   /** Understood by the Lingvo compiler but absent from its documentation. */
   | 'undocumented';
 
-/** Description of one DSL tag. */
+/**
+ * Description of one DSL tag, from the registry behind the parser.
+ *
+ * @experimental The tag registry may gain fields and values in a minor version.
+ */
 export interface TagSpec {
   /** Tag name without brackets, e.g. `b`, `m`, `lang`, `!trs`, `'`. */
   readonly name: string;
@@ -281,6 +295,7 @@ export function getMarginLevel(name: string): number | undefined {
  * `m0`..`m9` resolve to the `m` spec. The lookup is case-sensitive.
  *
  * @returns The spec, or `undefined` if the tag is unknown.
+ * @experimental The tag registry may gain fields and values in a minor version.
  */
 export function getTagSpec(name: string): TagSpec | undefined {
   return BY_NAME.get(name) ?? (getMarginLevel(name) === undefined ? undefined : BY_NAME.get('m'));

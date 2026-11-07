@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_EXPANDED_LENGTH, MAX_VARIANTS } from '../../src/index.js';
 import { show } from '../markup/helpers.js';
 import { hw, variants } from './helpers.js';
+
+/** The documented limits of `parseHeadword` (`DSL3202`, `DSL3203`). */
+const MAX_EXPANDED_LENGTH = 500;
+const MAX_VARIANTS = 256;
 
 const NBSP = String.fromCharCode(0xa0);
 

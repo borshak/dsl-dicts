@@ -271,9 +271,9 @@ function roleOf(scope: Scope): Role {
 
 /** The Lingvo name of the language of a `[lang]` tag, if it names a known one. */
 function language(node: TagNode): string | undefined {
-  const { id, name } = node.attrs;
-  if (id !== undefined) return findLanguageById(id)?.name;
-  if (name !== undefined) return resolveLanguageName(name)?.language.name;
+  const { languageId, language } = node.attrs;
+  if (languageId !== undefined) return findLanguageById(languageId)?.name;
+  if (language !== undefined) return resolveLanguageName(language)?.language.name;
   return undefined;
 }
 
@@ -630,7 +630,7 @@ function text(atoms: readonly Atom[]): string {
 function label(atoms: readonly Atom[], context: ExtractionContext): Label | undefined {
   const value = normalizeLabel(text(atoms));
   if (value.length === 0) return undefined;
-  if (context.options.labels === 'keep') return { text: value };
+  if (!context.options.expandLabels) return { text: value };
   const expansion = context.dictionary.abbreviations?.get(value);
   return typeof expansion === 'string' ? { text: value, expansion } : { text: value };
 }

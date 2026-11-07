@@ -7,16 +7,21 @@
 import { isAbsolute, relative } from 'node:path';
 import { DslError } from '../../index.js';
 
-/** Process exit codes of `dsl-dicts`. */
+/** Process exit codes of `dsl-dicts`. Stable: scripts may rely on them. */
 export const EXIT = {
   /** Success. */
   ok: 0,
-  /** Usage error: unknown command or option, a missing or invalid argument. */
+  /**
+   * Usage error: unknown command or option, a missing or invalid argument, options that a
+   * plugin refuses.
+   */
   usage: 1,
   /** Dictionary or I/O error: unreadable input, a strict-mode failure, output that cannot be written. */
   dictionary: 2,
   /** Plugin error: the plugin cannot be loaded, or fails while setting up or processing. */
   plugin: 3,
+  /** Internal error: a bug of dsl-dicts (`EX_SOFTWARE`). */
+  internal: 70,
 } as const;
 
 /** An error with the exit code it ends the CLI with. */
@@ -33,7 +38,11 @@ export class CliError extends Error {
 /** A usage error (exit code 1). */
 export const usageError = (message: string): CliError => new CliError(EXIT.usage, message);
 
-/** The exit code an error ends the CLI with. */
+/**
+ * The exit code an error ends the CLI with: that of a `CliError`, by code for a `DslError`,
+ * `dictionary` for an error of the system (it has a string `code`, such as `ENOENT`), and
+ * `internal` for anything else, which can only be a bug.
+ */
 export function exitCodeOf(error: unknown): number {
   if (error instanceof CliError) return error.exitCode;
   if (error instanceof DslError) {
@@ -43,7 +52,7 @@ export function exitCodeOf(error: unknown): number {
       case 'DSL5002':
       case 'DSL7006':
         return EXIT.plugin;
-      // An option the library refuses: the encoding, mostly.
+      // An option the library or a plugin refuses: the encoding, mostly.
       case 'DSL0001':
       case 'DSL1002':
       case 'DSL1003':
@@ -52,7 +61,13 @@ export function exitCodeOf(error: unknown): number {
         return EXIT.dictionary;
     }
   }
-  return EXIT.dictionary;
+  if (isSystemError(error)) return EXIT.dictionary;
+  return EXIT.internal;
+}
+
+/** An error of the system or of Node.js, such as `ENOENT` or `ERR_STREAM_PREMATURE_CLOSE`. */
+function isSystemError(error: unknown): boolean {
+  return error instanceof Error && typeof (error as { code?: unknown }).code === 'string';
 }
 
 /** Whether an error is a closed output pipe (`dsl-dicts … | head`). */
@@ -61,8 +76,15 @@ export function isBrokenPipe(error: unknown): boolean {
   return code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED';
 }
 
-/** The message of an error, with its code for a `DslError`. */
+/**
+ * The message of an error, with its code for a `DslError`; for an internal error, its stack,
+ * to be reported.
+ */
 export function describeError(error: unknown): string {
+  if (exitCodeOf(error) === EXIT.internal) {
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    return `internal error, please report it: ${detail}`;
+  }
   if (error instanceof DslError) {
     const position = error.position ?? error.diagnostic?.position;
     const where =

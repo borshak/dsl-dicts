@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DslError } from '../../src/index.js';
-import { createSegmenter } from '../../src/segment/index.js';
+import { createSegmenter } from '../../src/segment/segmenter.js';
 import { bodies, checkPositions, HEADER, headwords, segment } from './helpers.js';
 
 describe('entries', () => {

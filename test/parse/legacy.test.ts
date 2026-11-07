@@ -14,8 +14,12 @@ async function parseFixture(name: string) {
   const dict = parseDsl(new TextEncoder().encode(text));
   const entries: DslEntry[] = [];
   for await (const entry of dict.entries()) entries.push(entry);
-  const diagnostics = [...dict.diagnostics, ...entries.flatMap((e) => e.diagnostics ?? [])];
-  return { header: await dict.header, entries, codes: diagnostics.map((d) => d.code) };
+  // The dictionary keeps the diagnostics of every layer, those of the entries included.
+  const codes = dict.diagnostics.map((d) => d.code);
+  expect(codes.filter((code) => /^DSL[34]/.test(code))).toEqual(
+    entries.flatMap((e) => e.diagnostics ?? []).map((d) => d.code),
+  );
+  return { header: await dict.header, entries, codes };
 }
 
 describe('legacy fixtures through parseDsl', () => {

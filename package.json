@@ -34,7 +34,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "clean": "node -e \"for (const d of ['dist','node_modules/.cache/tsc']) require('node:fs').rmSync(d,{recursive:true,force:true})\"",
     "typecheck": "tsc -p tsconfig.core.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run --project node",
     "test:package": "node scripts/test-package.mjs",

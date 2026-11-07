@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import type { DecodeOptions, Diagnostic } from '../../src/index.js';
+import type { DecodeDslOptions, Diagnostic } from '../../src/index.js';
 import {
   asyncOf,
   CODE_PAGE_SAMPLES,
@@ -19,7 +19,7 @@ interface Fixture {
   readonly name: string;
   readonly bytes: Uint8Array;
   readonly text: string;
-  readonly options?: DecodeOptions;
+  readonly options?: DecodeDslOptions;
 }
 
 function fixtures(): Fixture[] {
@@ -215,7 +215,7 @@ describe('properties', () => {
       .map(([p, b]) => concatBytes([new TextEncoder().encode(p), b]));
     await fc.assert(
       fc.asyncProperty(bytes, splits, chunkSize, async (input, sizes, size) => {
-        const options: DecodeOptions = { decompress: 'none' };
+        const options: DecodeDslOptions = { decompress: 'none' };
         const reference = summary(await decodeAll(input, options));
         const result = await decodeAll(split(input, sizes), { ...options, chunkSize: size });
         expect(summary(result)).toEqual(reference);

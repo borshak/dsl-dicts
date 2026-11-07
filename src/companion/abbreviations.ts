@@ -4,14 +4,14 @@
  * @packageDocumentation
  */
 
-import type { DecodeOptions } from '../decode/decode.js';
+import type { DecodeDslOptions } from '../decode/decode.js';
 import type { DslSource } from '../decode/source.js';
 import {
+  CATALOG,
   createDiagnostic,
-  createStrictSink,
-  DIAGNOSTICS,
   type DiagnosticSink,
-  DslError,
+  dslError,
+  optionsSink,
 } from '../diagnostics/index.js';
 import { parseMarkup } from '../markup/parse.js';
 import { parseDsl } from '../parse/parse.js';
@@ -20,10 +20,8 @@ import { normalizeLabel, toPlainText } from '../render/plain-text.js';
 /**
  * Options of {@link parseAbbreviations}: those of `decodeDsl` (encoding detection, `.dz`
  * decompression, `diagnostics`, `strict`).
- *
- * @experimental
  */
-export type ParseAbbreviationsOptions = DecodeOptions;
+export type ParseAbbreviationsOptions = DecodeDslOptions;
 
 /**
  * A sink that drops `DSL2001` (a missing mandatory directive): abbreviations files often have
@@ -34,7 +32,7 @@ function withoutMissingDirectives(sink: DiagnosticSink | undefined): DiagnosticS
     ? undefined
     : {
         report(diagnostic) {
-          if (diagnostic.code !== DIAGNOSTICS.missingDirective.code) sink.report(diagnostic);
+          if (diagnostic.code !== CATALOG.missingDirective.code) sink.report(diagnostic);
         },
       };
 }
@@ -73,14 +71,13 @@ function withoutMissingDirectives(sink: DiagnosticSink | undefined): DiagnosticS
  * options.
  * @throws DslError for invalid arguments (`DSL0001`, `DSL1002`, `DSL1003`), unreadable input
  * (`DSL1001`) or, in strict mode, a diagnostic of severity `error`.
- * @experimental
  */
 export async function parseAbbreviations(
   source: DslSource,
   options: ParseAbbreviationsOptions = {},
 ): Promise<Map<string, string>> {
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
+    throw dslError('invalidArgument', 'Options must be an object.');
   }
   const inner = withoutMissingDirectives(options.diagnostics);
   const parsed = parseDsl(source, {
@@ -89,7 +86,7 @@ export async function parseAbbreviations(
     body: 'raw',
     positions: false,
   });
-  const sink: DiagnosticSink | undefined = options.strict ? createStrictSink(inner) : inner;
+  const sink = optionsSink({ diagnostics: inner, strict: options.strict });
   const abbreviations = new Map<string, string>();
   for await (const batch of parsed.batches()) {
     for (const entry of batch) {

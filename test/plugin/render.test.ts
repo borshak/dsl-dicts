@@ -85,11 +85,18 @@ describe('toPlainText', () => {
       ['~ form', 'tilde form'],
     ]);
     expect(plain('[p]adj.[/p] [p]n[/p]')).toBe('adj. n');
-    expect(plain('[p]adj.[/p] [p] n [/p] [p][i]adj.[/i][/p]', { abbreviations })).toBe(
+    const expand = { abbreviations, expandLabels: true };
+    expect(plain('[p]adj.[/p] [p] n [/p] [p][i]adj.[/i][/p]', expand)).toBe(
       'adjective n adjective',
     );
-    expect(plain('[p]~ form[/p]', { abbreviations })).toBe('tilde form');
+    expect(plain('[p]~ form[/p]', expand)).toBe('tilde form');
+    // The abbreviations alone do not expand: expandLabels does.
+    expect(plain('[p]adj.[/p]', { abbreviations })).toBe('adj.');
     expect(plain('[p]adj.[/p] x', { labels: false })).toBe('x');
+    expect(plain('[p]adj.[/p] x', { ...expand, labels: false })).toBe('x');
+    expect(zoneText(nodes('[trn][p]adj.[/p] x[/trn]'), { ...expand, labels: true })).toBe(
+      'adjective x',
+    );
   });
 
   it('gives the text of links', () => {
@@ -119,9 +126,9 @@ describe('toPlainText', () => {
     expect(plain(text, { stress: 'combining' })).toBe('прови\u0301нция, ae\u0301i\u0301');
     expect(plain("[']~[/']", { tilde: 'o', stress: 'combining' })).toBe('o\u0301');
     // Zones too; punctuation inside the tag gets no accent.
-    expect(zoneText(nodes("[trn]д[']о[/'][']-[/']м[/trn]"), ['trn'], { stress: 'combining' })).toBe(
-      'до\u0301-м',
-    );
+    expect(
+      zoneText(nodes("[trn]д[']о[/'][']-[/']м[/trn]"), { zones: ['trn'], stress: 'combining' }),
+    ).toBe('до\u0301-м');
   });
 
   it('renders crossed tags as intended', () => {
@@ -138,7 +145,9 @@ describe('toPlainText', () => {
       () => toPlainText([], { indent: 2 as never }),
       () => toPlainText([], { abbreviations: {} as never }),
       () => toPlainText([], { stress: 'acute' as never }),
-      () => zoneText([], 'trn' as never),
+      () => toPlainText([], { expandLabels: 'yes' as never }),
+      () => zoneText([], { zones: 'trn' as never }),
+      () => zoneText([], null as never),
     ]) {
       expect(thrown(call)).toMatchObject({ code: 'DSL0001' });
     }
@@ -149,8 +158,8 @@ describe('zoneText', () => {
   it('gives one line per outermost zone, collapsed', () => {
     const tree = nodes('x [trn]a\n b[br]c[/trn] y [ex]d [com]e[/com][/ex] [com] [/com] z');
     expect(zoneText(tree)).toBe('a b c\nd e');
-    expect(zoneText(tree, ['com'])).toBe('e');
-    expect(zoneText(tree, [])).toBe('');
+    expect(zoneText(tree, { zones: ['com'] })).toBe('e');
+    expect(zoneText(tree, { zones: [] })).toBe('');
   });
 
   it('leaves out [!trs], labels and media, and zones inside [!trs]', () => {
@@ -158,19 +167,19 @@ describe('zoneText', () => {
       '[trn][p]adj.[/p] a [!trs]b[/!trs] [s]c.wav[/s][/trn] [!trs][ex]d[/ex][/!trs]',
     );
     expect(zoneText(tree)).toBe('a');
-    expect(zoneText(tree, SEARCH_ZONES, { labels: true, media: true })).toBe('adj. a c.wav');
+    expect(zoneText(tree, { zones: SEARCH_ZONES, labels: true, media: true })).toBe('adj. a c.wav');
   });
 
   it('includes [trn1], tildes and secondary text, and finds zones at any depth', () => {
     const tree = nodes('[m1][*][i][trn1]~ a[/trn1][/i][/*] [lang id=1033][ex]^~[/ex][/lang]');
-    expect(zoneText(tree, undefined, { tilde: 'word' })).toBe('word a\nWord');
-    expect(zoneText(tree, undefined, { tilde: 'word', secondary: false })).toBe('Word');
+    expect(zoneText(tree, { tilde: 'word' })).toBe('word a\nWord');
+    expect(zoneText(tree, { tilde: 'word', secondary: false })).toBe('Word');
   });
 
   it('includes the zones of sub-entries unless subentries is false', async () => {
     const entry = await entryOf('w\n\t[trn]a[/trn]\n\t@ s\n\t[trn]b[/trn]\n\t@\n');
     expect(zoneText(entry.body)).toBe('a\nb');
-    expect(zoneText(entry.body, undefined, { subentries: false })).toBe('a');
+    expect(zoneText(entry.body, { subentries: false })).toBe('a');
   });
 });
 

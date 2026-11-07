@@ -10,7 +10,14 @@
  * - Escapes are resolved and meta characters are interpreted, but nothing is substituted
  *   that the parser cannot know: `~` stays a `tilde` node, links keep their raw target text.
  * - Positions (`position`, `end`) are optional: they are present unless the parser was asked
- *   to leave them out.
+ *   to leave them out. Both have the shape of `SourcePosition`.
+ *
+ * Evolution policy: the AST is the stable contract of dsl-dicts, together with `DslEntry` and
+ * `SourcePosition`. Consumers must ignore node `type`s and fields they do not know: a minor
+ * version may add node types, fields and attribute keys, and new tag names appear as `tag`
+ * nodes at any time. Changing the meaning of a node type or a field, or removing one, is a
+ * major version of dsl-dicts and a new {@link AST_VERSION}. The `message` of a diagnostic is
+ * not part of the contract.
  *
  * @packageDocumentation
  */
@@ -18,19 +25,15 @@
 import type { SourcePosition } from '../diagnostics/index.js';
 
 /**
- * Version of the AST schema. It changes only when a change could break a consumer: a node
- * type or field is removed or changes meaning. Adding optional fields, node types or tag
- * names does not change it.
- *
- * @experimental
+ * Version of the AST schema: an integer, which is a major version. It changes only when a
+ * change could break a consumer that follows the evolution policy (see the module
+ * documentation): a node type or field is removed or changes meaning. Adding node types,
+ * fields or tag names does not change it, which is why consumers must ignore what they do
+ * not know. Recorded in exports (`JsonlHeaderRecord.astVersion`).
  */
 export const AST_VERSION = 1;
 
-/**
- * Where a node is in the source. Both fields are absent when positions are switched off.
- *
- * @experimental
- */
+/** Where a node is in the source. Both fields are absent when positions are switched off. */
 export interface NodeLocation {
   /** Position of the node's first character in the source, e.g. the `[` of a tag. */
   readonly position?: SourcePosition;
@@ -45,11 +48,11 @@ export interface NodeLocation {
  * Plain text with escapes resolved: `\[` is `[`, `[[` is `[`, an escaped space is U+00A0
  * (except inside `[s]` and `[video]`, where it stays a space). Never empty, never contains a
  * newline. Adjacent text is always merged into one node.
- *
- * @experimental
  */
 export interface TextNode extends NodeLocation {
+  /** The node type. */
   readonly type: 'text';
+  /** The text. */
   readonly text: string;
 }
 
@@ -57,23 +60,24 @@ export interface TextNode extends NodeLocation {
  * Attributes of a tag, typed by the tag's attribute schema in the registry. Only the fields
  * that apply to the tag are set; unknown tags have none (see `rawAttrs`). Values are kept even
  * when they are unknown (an unknown color or language), with a diagnostic.
- *
- * @experimental
  */
 export interface TagAttributes {
   /** `[m]`, `[m0]`..`[m9]`: the margin level; 0 for a bare `[m]`. */
   readonly level?: number;
   /** `[c name]`: the color name; absent for a bare `[c]` (the viewer's default color). */
   readonly color?: string;
-  /** `[lang id=1033]`: a Windows LCID or a legacy Lingvo id (1-30). */
-  readonly id?: number;
+  /**
+   * `[lang id=1033]`: the language as a number, a Windows LCID or a legacy Lingvo id (1-30).
+   * Resolve it with `findLanguageById`.
+   */
+  readonly languageId?: number;
   /**
    * `[lang name="English"]`: a Lingvo language name, as written. Lingvo names are
    * case-sensitive; an inexact name that GoldenDict would accept (`english`, `Spanish`) is
-   * kept as is, with `DSL4107`. Resolve it with `resolveLanguageName`, and an `id` with
-   * `findLanguageById`: attributes hold what is written, not what it means.
+   * kept as is, with `DSL4107`. Resolve it with `resolveLanguageName`: attributes hold what
+   * is written, not what it means.
    */
-  readonly name?: string;
+  readonly language?: string;
   /** `[ref dict="..."]`: the name of the dictionary the link points to. */
   readonly dict?: string;
   /** `[ref target="..."]`, `[url target="..."]` (undocumented): the link target. */
@@ -85,10 +89,9 @@ export interface TagAttributes {
  *
  * `[m]` tags are block-level: they are always children of the body or of a sub-entry, never
  * of another tag (see the recovery rules of `parseBody`).
- *
- * @experimental
  */
 export interface TagNode extends NodeLocation {
+  /** The node type. */
   readonly type: 'tag';
   /**
    * The registry name (`b`, `c`, `!trs`, `'`); `m` for `[m]` and `[m0]`..`[m9]`. Unknown tags
@@ -112,45 +115,43 @@ export interface TagNode extends NodeLocation {
  * A `line` break separates two lines of content. There is none before the first content of
  * the body or of a sub-entry, after the last, around a sub-entry, or before an `[m]` tag,
  * which starts a new paragraph by itself.
- *
- * @experimental
  */
 export interface LineBreakNode extends NodeLocation {
+  /** The node type. */
   readonly type: 'lineBreak';
+  /** Where the break comes from: between two body lines, or a `[br]` tag. */
   readonly origin: 'line' | 'tag';
 }
 
 /**
  * A `<<target>>` link to another entry of the same dictionary. The children hold the target
  * as written: `text` and `tilde` nodes only (other markup inside a link is kept as text).
- *
- * @experimental
  */
 export interface LinkNode extends NodeLocation {
+  /** The node type. */
   readonly type: 'link';
   /** The target as written: `text` and `tilde` nodes. */
-  readonly children: readonly MarkupNode[];
+  readonly children: readonly (TextNode | TildeNode)[];
 }
 
 /**
  * `~`: the entry's headword. `^~` is the headword with the case of its first character
  * flipped (`flipCase`). The markup parser does not substitute it; projections do. (In a
  * headword's `text` and `variants` it is substituted; see {@link Headword}.)
- *
- * @experimental
  */
 export interface TildeNode extends NodeLocation {
+  /** The node type. */
   readonly type: 'tilde';
+  /** `^~`: the case of the first character is flipped. */
   readonly flipCase: boolean;
 }
 
 /**
  * A sub-entry, `@ headword` ... `@`, at the place where it occurs in the parent's markup: it
  * nests inside the tags that are open at that point (typically an `[m]` tag).
- *
- * @experimental
  */
 export interface SubentryNode extends NodeLocation {
+  /** The node type. */
   readonly type: 'subentry';
   /**
    * The headwords, one per `@ headword` line, at least one. A `~` in them stands for the
@@ -175,8 +176,6 @@ export interface SubentryNode extends NodeLocation {
  * - `~` and `^~` stand for another headword (see `text`); `^` is literal otherwise.
  *
  * Plain data, like every AST node.
- *
- * @experimental
  */
 export interface Headword extends NodeLocation {
   /**
@@ -217,40 +216,13 @@ export interface Headword extends NodeLocation {
   readonly variants: readonly string[];
 }
 
-/**
- * Any node of the markup AST.
- *
- * @experimental
- */
+/** Any node of the markup AST. */
 export type MarkupNode = TextNode | TagNode | LineBreakNode | LinkNode | TildeNode | SubentryNode;
 
-/**
- * A node that has children.
- *
- * @experimental
- */
+/** A node that has children. */
 export type ParentNode = TagNode | LinkNode | SubentryNode;
 
-/**
- * Makes every property of a type read-only, recursively. AST types are already read-only; this
- * helper is for types built from them, such as the entry a plugin receives (`PluginEntry`,
- * `DeepReadonly<DslEntry>`).
- *
- * @experimental
- */
-export type DeepReadonly<T> = T extends (...args: never[]) => unknown
-  ? T
-  : T extends readonly (infer U)[]
-    ? readonly DeepReadonly<U>[]
-    : T extends object
-      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
-      : T;
-
-/**
- * Tells whether a node has children.
- *
- * @experimental
- */
+/** Tells whether a node has children. */
 export function isParentNode(node: MarkupNode): node is ParentNode {
   return node.type === 'tag' || node.type === 'link' || node.type === 'subentry';
 }

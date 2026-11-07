@@ -8,18 +8,14 @@ import {
   createDiagnostic,
   type Diagnostic,
   type DiagnosticSink,
-  DslError,
+  dslError,
   type SourcePosition,
 } from '../diagnostics/index.js';
 import { HeaderBuilder, isDslSpace, trimDslSpace } from './header.js';
 import { LineReader, type LogicalLine } from './lines.js';
 import type { BodyLine, DslHeader, LineSegment, RawEntry, RawLine } from './types.js';
 
-/**
- * Options of {@link createSegmenter}.
- *
- * @experimental
- */
+/** Options of {@link createSegmenter}. Internal. */
 export interface SegmenterOptions {
   /**
    * Receives diagnostics as they are found. For strict mode, pass a sink made with
@@ -31,9 +27,7 @@ export interface SegmenterOptions {
 /**
  * Synchronous segmentation engine. Feed it text chunks, split anywhere, with `push`; call
  * `end` once at the end of input. Both return the entries completed so far, in order: an entry
- * is complete when the next headword or the end of input is seen.
- *
- * @experimental
+ * is complete when the next headword or the end of input is seen. Internal.
  */
 export interface Segmenter {
   /** Feeds the next chunk of text. */
@@ -179,7 +173,7 @@ class SegmenterImpl implements Segmenter {
   }
 
   push(text: string): RawEntry[] {
-    if (this.ended) throw DslError.of('invalidArgument', 'push() was called after end().');
+    if (this.ended) throw dslError('invalidArgument', 'push() was called after end().');
     this.reader.push(text);
     return this.take();
   }
@@ -433,36 +427,12 @@ function findSubentryMarker(text: string): number {
 
 /**
  * Creates a synchronous segmenter. It turns text (as produced by `decodeDsl`; a BOM and
- * `\r\n` or `\r` newlines are also accepted) into the header and a sequence of raw entries.
- *
- * Rules (Lingvo manual, with GoldenDict's tolerance where Lingvo would reject the file):
- * - Comments `{{ … }}` are removed first, possibly across lines (see the comment rules of
- *   the line reader: `\{{` is not a comment, `\` is not special inside one). A line that
- *   held nothing but comments, spaces and tabs is dropped silently.
- * - Spaces and tabs are the only whitespace: a line starting with any other character
- *   (including U+00A0) is a headword or a directive. Blank means empty or spaces and tabs only.
- * - The preamble is the leading `#` lines, with blank lines allowed between them. A `#` line
- *   after the preamble is ignored with `DSL2006`, wherever it is; it does not end the entry.
- *   A headword starting with `#` must be written `\#`.
- * - Consecutive headword lines share the body: the indented lines that follow. Body lines
- *   lose their indentation, which is kept in `indent`.
- * - Blank lines between entries are normal. Blank lines between headwords, or between the
- *   headwords and the body, are skipped and the headwords merge (`DSL2202`, as GoldenDict:
- *   Lingvo rejects them). Blank lines inside a body are skipped and the body goes on
- *   (`DSL2203`, GoldenDict's "orphan string").
- * - Indented lines before the first headword are ignored (`DSL2201`). Headwords at the end of
- *   input without a body still make an entry, with an empty body (`DSL2204`).
- * - A body line whose first character, after spaces, tabs and tags, is an unescaped `@` is a
- *   sub-entry marker: `subentry-start` if text other than closing tags follows, else
- *   `subentry-end`. Consecutive start lines are headwords of one sub-entry. A start after
- *   other lines of an open sub-entry closes it implicitly (`DSL2301`, like a sub-entry left
- *   open at the end of the entry); an end without an open sub-entry gives `DSL2302`.
- *
- * @experimental
+ * `\r\n` or `\r` newlines are also accepted) into the header and a sequence of raw entries,
+ * by the rules of `segmentDsl`. Internal: the engine behind `segmentDsl`, exposed for tests.
  */
 export function createSegmenter(options: SegmenterOptions = {}): Segmenter {
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'Options must be an object.');
+    throw dslError('invalidArgument', 'Options must be an object.');
   }
   return new SegmenterImpl(options, true);
 }

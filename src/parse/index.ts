@@ -10,4 +10,5 @@ export {
   type ParseDslOptions,
   type ParsedDsl,
   parseDsl,
+  type RawParseDslOptions,
 } from './parse.js';

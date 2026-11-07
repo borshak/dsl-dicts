@@ -27,11 +27,11 @@ describe('search-text plugin', () => {
     const entries = await entriesOf(DICT);
     expect(run(entries)).toEqual([
       {
-        headwords: ['color', 'colour', 'hue', 'color code'],
+        forms: ['color', 'colour', 'hue', 'color code'],
         text: 'tint, shade\nColor red\nsee hue\ncrossed\na code',
       },
       // No zones: the plain text, without labels, [!trs] and media.
-      { headwords: ['plain'], text: 'just text\nsecond line' },
+      { forms: ['plain'], text: 'just text\nsecond line' },
     ]);
   });
 
@@ -42,10 +42,30 @@ describe('search-text plugin', () => {
       'tint, shade\nsee hue\ncrossed\na code',
     );
     expect(run(entries, { subentries: false })[0]).toEqual({
-      headwords: ['color', 'colour', 'hue'],
+      forms: ['color', 'colour', 'hue'],
       text: 'tint, shade\nColor red\nsee hue\ncrossed',
     });
-    expect(run(entries, { fallback: 'none' })[1]).toEqual({ headwords: ['plain'], text: '' });
+    expect(run(entries, { fallback: 'none' })[1]).toEqual({ forms: ['plain'], text: '' });
+  });
+
+  it('includes labels, expanded with the abbreviations of the context, when asked', async () => {
+    const entries = await entriesOf(DICT);
+    const context = createDictionaryContext({
+      abbreviations: new Map([
+        ['n', 'noun'],
+        ['adj.', 'adjective'],
+      ]),
+    });
+    const search = (options: SearchTextPluginOptions) =>
+      entries.map(setupPlugin(searchText, context, options)).map((out) => out.text);
+    expect(search({})).toEqual(run(entries).map((out) => out.text));
+    expect(search({ labels: true })[0]).toMatch(/^n tint, shade\n/);
+    expect(search({ labels: true, expandLabels: true })[0]).toMatch(/^noun tint, shade\n/);
+    expect(search({ labels: true, expandLabels: true })[1]).toBe(
+      'adjective just text\nsecond line',
+    );
+    // Expanding without including changes nothing.
+    expect(search({ expandLabels: true })).toEqual(search({}));
   });
 
   it('runs through parseDsl, with JSON-serializable output', async () => {
@@ -64,7 +84,7 @@ describe('search-text plugin', () => {
       null,
     ]) {
       expect(() => setupPlugin(searchText, context, options as never)).toThrow(
-        expect.objectContaining({ code: 'DSL5001', plugin: 'search-text' }),
+        expect.objectContaining({ code: 'DSL0001', plugin: 'search-text' }),
       );
     }
   });

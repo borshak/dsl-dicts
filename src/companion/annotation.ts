@@ -5,15 +5,13 @@
  */
 
 import { type LanguageInfo, resolveLanguageName } from '../data/languages.js';
-import { type DecodeOptions, decodeDsl } from '../decode/decode.js';
+import { type DecodeDslOptions, decodeDsl } from '../decode/decode.js';
 import type { DslSource } from '../decode/source.js';
-import { createDiagnostic, createStrictSink, type Diagnostic } from '../diagnostics/index.js';
+import { createDiagnostic, type Diagnostic, optionsSink } from '../diagnostics/index.js';
 import { parseDirective } from '../segment/header.js';
 
 /**
  * One section of an {@link Annotation}: the description in one language.
- *
- * @experimental
  */
 export interface AnnotationSection {
   /**
@@ -40,8 +38,6 @@ export interface AnnotationSection {
  * file has `#LANGUAGE "Name"` lines, in one section per language.
  *
  * Plain data. This is also what plugins receive as `DictionaryContext.annotation`.
- *
- * @experimental
  */
 export interface Annotation {
   /** The sections in file order; empty if the file has no text and no `#LANGUAGE` line. */
@@ -56,10 +52,8 @@ export interface Annotation {
 /**
  * Options of {@link parseAnnotation}: those of `decodeDsl` (encoding detection, `.dz`
  * decompression, `diagnostics`, `strict`).
- *
- * @experimental
  */
-export type ParseAnnotationOptions = DecodeOptions;
+export type ParseAnnotationOptions = DecodeDslOptions;
 
 /**
  * Parses the annotation file of a dictionary (`.ann`).
@@ -82,14 +76,13 @@ export type ParseAnnotationOptions = DecodeOptions;
  * `strict` options.
  * @throws DslError for invalid arguments (`DSL0001`, `DSL1002`, `DSL1003`), unreadable
  * input (`DSL1001`) or, in strict mode, a diagnostic of severity `error`.
- * @experimental
  */
 export async function parseAnnotation(
   source: DslSource,
   options: ParseAnnotationOptions = {},
 ): Promise<Annotation> {
   const decoded = decodeDsl(source, options);
-  const sink = options.strict ? createStrictSink(options.diagnostics) : options.diagnostics;
+  const sink = optionsSink(options);
   const report = (diagnostic: Diagnostic): void => sink?.report(diagnostic);
   const chunks: string[] = [];
   for await (const chunk of decoded) chunks.push(chunk);

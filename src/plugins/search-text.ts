@@ -9,25 +9,21 @@ import {
   definePlugin,
   hasZones,
   type MarkupNode,
-  type PlainTextOptions,
   SEARCH_ZONES,
+  type ToPlainTextOptions,
   toPlainText,
   walk,
   zoneText,
 } from '../index.js';
 
-/**
- * Output of the `search-text` plugin. JSON-serializable.
- *
- * @experimental
- */
+/** Output of the `search-text` plugin. JSON-serializable. */
 export interface SearchTextResult {
   /**
    * Every index form (`Headword.variants`) of the entry's headwords, then of its sub-entries'
    * headwords, without duplicates, in order. Sub-entries are listed in the index of a DSL
    * dictionary like entries.
    */
-  readonly headwords: string[];
+  readonly forms: readonly string[];
   /**
    * The searchable text of the body: one line per search zone (see `zoneText`), or, for a
    * body without zones, the plain text (see the `fallback` option).
@@ -35,13 +31,9 @@ export interface SearchTextResult {
   readonly text: string;
 }
 
-/**
- * Options of the `search-text` plugin.
- *
- * @experimental
- */
+/** Options of the `search-text` plugin. */
 export interface SearchTextPluginOptions
-  extends Pick<PlainTextOptions, 'secondary' | 'subentries'> {
+  extends Pick<ToPlainTextOptions, 'secondary' | 'subentries'> {
   /** The zone tags to index. Default `SEARCH_ZONES`: `trn`, `trn1`, `ex`, `com`. */
   readonly zones?: readonly string[];
   /**
@@ -50,40 +42,55 @@ export interface SearchTextPluginOptions
    * media, one line per line; or `none`, an empty text.
    */
   readonly fallback?: 'plain-text' | 'none';
+  /**
+   * Include `[p]` labels in the text. Default `false`: Lingvo leaves labels out of the
+   * search index.
+   */
+  readonly labels?: boolean;
+  /**
+   * Replace the labels included by their expansion from the dictionary's abbreviations
+   * (`DictionaryContext.abbreviations`), when they were read. Default `false`.
+   */
+  readonly expandLabels?: boolean;
 }
 
-const KEYS = new Set(['secondary', 'subentries', 'zones', 'fallback']);
+const KEYS = new Set(['secondary', 'subentries', 'zones', 'fallback', 'labels', 'expandLabels']);
 
 /**
  * Extracts what a full-text search should index from each entry: the index forms of its
  * headwords, and the text of its search zones (`[trn]`, `[ex]`, `[com]`) without `[!trs]`,
  * labels and media, with `~` substituted and whitespace collapsed. Entries without zones
  * fall back to their plain text (option `fallback`).
- *
- * @experimental
  */
 export const searchText = definePlugin({
   name: 'search-text',
   version: '1.0.0',
-  setup(_context, options: SearchTextPluginOptions | undefined) {
+  setup(context, options: SearchTextPluginOptions | undefined) {
     const {
       zones = SEARCH_ZONES,
       fallback = 'plain-text',
       secondary,
       subentries,
+      labels = false,
+      expandLabels,
     } = checkOptions(options);
-    const base: PlainTextOptions = { secondary, subentries };
+    const base: ToPlainTextOptions = {
+      secondary,
+      subentries,
+      labels,
+      expandLabels,
+      abbreviations: context.abbreviations,
+    };
     const includeSubentries = subentries !== false;
     return (entry): SearchTextResult => {
       const render = { ...base, headwords: entry.headwords };
       let text = '';
       if (hasZones(entry.body, zones)) {
-        text = zoneText(entry.body, zones, render);
+        text = zoneText(entry.body, { ...render, zones });
       } else if (fallback === 'plain-text') {
         text = toPlainText(entry.body, {
           ...render,
           unindexed: false,
-          labels: false,
           media: false,
         });
       }
@@ -92,7 +99,7 @@ export const searchText = definePlugin({
         for (const form of headword.variants) forms.add(form);
       }
       if (includeSubentries) collectSubentryForms(entry.body, forms);
-      return { headwords: [...forms], text };
+      return { forms: [...forms], text };
     };
   },
 });
@@ -111,19 +118,19 @@ function collectSubentryForms(body: readonly MarkupNode[], forms: Set<string>): 
 function checkOptions(options: SearchTextPluginOptions | undefined): SearchTextPluginOptions {
   if (options === undefined) return {};
   if (typeof options !== 'object' || options === null) {
-    throw DslError.of('invalidArgument', 'The search-text options must be an object.');
+    throw new DslError('DSL0001', 'The search-text options must be an object.');
   }
   for (const key of Object.keys(options)) {
     if (!KEYS.has(key)) {
-      throw DslError.of('invalidArgument', `The search-text plugin has no option ${key}.`);
+      throw new DslError('DSL0001', `The search-text plugin has no option ${key}.`);
     }
   }
   const { zones, fallback } = options;
   if (zones !== undefined && (!Array.isArray(zones) || zones.some((z) => typeof z !== 'string'))) {
-    throw DslError.of('invalidArgument', 'The zones option must be an array of tag names.');
+    throw new DslError('DSL0001', 'The zones option must be an array of tag names.');
   }
   if (fallback !== undefined && fallback !== 'plain-text' && fallback !== 'none') {
-    throw DslError.of('invalidArgument', 'The fallback option must be "plain-text" or "none".');
+    throw new DslError('DSL0001', 'The fallback option must be "plain-text" or "none".');
   }
   return options;
 }

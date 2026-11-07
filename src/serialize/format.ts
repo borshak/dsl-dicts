@@ -35,23 +35,20 @@ export const JSONL_FORMAT = 'dsl-dicts/jsonl';
 /** Current `formatVersion` of the JSONL envelope (a major version). */
 export const JSONL_FORMAT_VERSION = 1;
 
-/**
- * A name and a version: of the generator, or of the plugin whose output the entries are.
- *
- * @experimental
- */
+/** A name and a version: of the generator, or of the plugin whose output the entries are. */
 export interface JsonlComponent {
+  /** The name: `dsl-dicts`, or the plugin name. */
   readonly name: string;
+  /** The version: of the package, or of the plugin's output format. */
   readonly version: string;
 }
 
 /**
  * The first record of a JSONL document, and the `header` of a JSON document: what is needed to
  * read the entries.
- *
- * @experimental
  */
 export interface JsonlHeaderRecord {
+  /** The record type. */
   readonly type: 'header';
   /** Always {@link JSONL_FORMAT}. */
   readonly format: typeof JSONL_FORMAT;
@@ -68,8 +65,11 @@ export interface JsonlHeaderRecord {
   readonly plugin: JsonlComponent | null;
   /** The directives of the dictionary header; `null` for a missing one. */
   readonly dictionary: {
+    /** `#NAME`. */
     readonly name: string | null;
+    /** `#INDEX_LANGUAGE`, as written. */
     readonly indexLanguage: string | null;
+    /** `#CONTENTS_LANGUAGE`, as written. */
     readonly contentsLanguage: string | null;
   };
   /** How the file was decoded. */
@@ -78,6 +78,7 @@ export interface JsonlHeaderRecord {
     readonly encoding: string;
     /** How the encoding was chosen (`EncodingSource`), e.g. `bom`. */
     readonly source: string;
+    /** `gzip` for gzip and dictzip input. */
     readonly compression: 'gzip' | 'none';
   };
 }
@@ -89,31 +90,32 @@ export interface JsonlHeaderRecord {
  *
  * @typeParam T - The payload: `DslEntry` for an export without a plugin, else what the plugin
  * returns.
- * @experimental
  */
 export interface JsonlEntryRecord<T = unknown> {
+  /** The record type. */
   readonly type: 'entry';
+  /** The payload: the AST entry, or the output of the plugin for the entry. */
   readonly data: T;
 }
 
 /**
  * The optional last record: how many entries were written and how many diagnostics of each
  * code were reported, counts only. A document without it may be cut short.
- *
- * @experimental
  */
 export interface JsonlSummaryRecord {
+  /** The record type. */
   readonly type: 'summary';
   /** The number of entry records. */
   readonly entries: number;
-  /** Number of diagnostics by code, in code order. */
+  /**
+   * Number of diagnostics by code, in code order: those of every layer and of the plugin,
+   * codes of plugins included.
+   */
   readonly diagnostics: Readonly<Record<string, number>>;
 }
 
 /**
  * Arguments of {@link createJsonlHeader}.
- *
- * @experimental
  */
 export interface JsonlHeaderInit {
   /** The header of the dictionary (`ParsedDsl.header`). */
@@ -132,8 +134,6 @@ export interface JsonlHeaderInit {
  * const dict = parseDsl(bytes);
  * createJsonlHeader({ header: await dict.header, info: await dict.info, plugin: article });
  * ```
- *
- * @experimental
  */
 export function createJsonlHeader({ header, info, plugin }: JsonlHeaderInit): JsonlHeaderRecord {
   return {

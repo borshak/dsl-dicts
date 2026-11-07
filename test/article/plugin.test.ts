@@ -104,6 +104,7 @@ describe('article plugin', () => {
       'x',
       { color: true },
       { labels: 'expanded' },
+      { expandLabels: 'no' },
       { stress: 'acute' },
       { secondary: 'yes' },
       { splitTranslations: 1 },
@@ -113,7 +114,7 @@ describe('article plugin', () => {
       expect(error, JSON.stringify(options)).toMatchObject({ code: 'DSL0001' });
     }
     await expect(articlesOf('a\n\tb\n', { kind: 'nope' })).rejects.toMatchObject({
-      code: 'DSL5001',
+      code: 'DSL0001',
       plugin: 'article',
     });
   });
@@ -126,6 +127,8 @@ describe('article plugin', () => {
       { extractors: { x: 1 } },
       { profile: 'x' },
       { name: 'two words' },
+      { version: '1.0' },
+      { version: 2 },
     ]) {
       expect(
         thrown(() => createArticlePlugin(config as never)),
@@ -154,6 +157,7 @@ describe('createArticlePlugin', () => {
         context.dictionary.header.name === 'Loud' ? 'loud' : classifyBody(body, context),
     });
     expect(plugin).toMatchObject({ name: 'loud-article', version: ARTICLE_VERSION });
+    expect(createArticlePlugin({ name: 'loud-article', version: '0.3.1' }).version).toBe('0.3.1');
     const text = 'w\n\t[m1][trn]quiet[/trn][/m]\n';
     const loud = await articleOf(text, undefined, { plugin, header: '#NAME "Loud"\n' });
     expect(loud).toMatchObject({ kind: 'loud', senses: [{ translations: ['QUIET'] }] });

@@ -140,9 +140,7 @@ export class HeaderBuilder {
   }
 }
 
-/**
- * Removes leading and trailing spaces and tabs. A trailing space escaped with `\` is kept.
- */
+/** Removes leading and trailing spaces and tabs. A trailing space escaped with `\` is kept. */
 export function trimDslSpace(text: string): string {
   let start = 0;
   let end = text.length;

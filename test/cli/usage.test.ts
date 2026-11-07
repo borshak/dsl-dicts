@@ -16,7 +16,9 @@ describe('usage', () => {
       expect(stderr).toBe('');
       expect(stdout).toContain('convert <file|dir>');
       expect(stdout).toContain('info <file>');
-      expect(stdout).toMatch(/Exit codes:\n\s+0 .*\n\s+1 .*\n\s+2 .*\n\s+3 /);
+      expect(stdout).toMatch(
+        /Exit codes \(stable[^)]*\):\n\s+0 .*\n\s+1 [\s\S]*\n\s+2 .*\n\s+3 .*\n\s+70 /,
+      );
     }
   });
 
@@ -34,14 +36,18 @@ describe('usage', () => {
     for (const option of [
       '--output',
       '--format',
-      '--view',
-      '--plugin ',
+      '--plugin <name|path>',
+      'article',
+      'plain-text',
+      'search-text',
       '--plugin-options',
       '--encoding',
       '--default-encoding',
       '--no-positions',
       '--no-companions',
-      '--strict',
+      '--abbreviations <path>',
+      '--annotation <path>',
+      '--strict[=<severity>]',
       '--summary',
       '--recursive',
       '--verbose',
@@ -51,8 +57,21 @@ describe('usage', () => {
     }
     // Loading a plugin runs its code: the help says so.
     expect(convert).toContain('code is executed');
-    expect(convert).toContain('Exit codes:');
-    expect((await run(['info', '--help'])).stdout).toContain('Usage: dsl-dicts info');
+    expect(convert).toContain('Exit codes (stable');
+    expect(convert).not.toContain('--view');
+    const info = (await run(['info', '--help'])).stdout;
+    expect(info).toContain('Usage: dsl-dicts info');
+    for (const option of [
+      '--format <format>',
+      '--strict[=<severity>]',
+      '--verbose',
+      '--quiet',
+      '--abbreviations <path>',
+      '--annotation <path>',
+    ]) {
+      expect(info, option).toContain(option);
+    }
+    expect(info).not.toContain('--json');
   });
 
   it('exits 1 without a command, with the usage on standard error', async () => {
