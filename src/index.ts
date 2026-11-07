@@ -35,3 +35,22 @@ export {
   type Severity,
   type SourcePosition,
 } from './diagnostics/index.js';
+export {
+  type BodyLine,
+  type BodyLineKind,
+  createSegmenter,
+  type Directive,
+  type DslHeader,
+  type LineSegment,
+  positionInLine,
+  type RawEntry,
+  type RawLine,
+  type SegmentedDsl,
+  type Segmenter,
+  type SegmenterOptions,
+  type SegmentOptions,
+  type SubentryEndLine,
+  type SubentryStartLine,
+  segmentDsl,
+  type TextBodyLine,
+} from './segment/index.js';

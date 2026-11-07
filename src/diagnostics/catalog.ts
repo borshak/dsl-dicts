@@ -121,6 +121,75 @@ export const DIAGNOSTICS = {
       'The decoded text contains U+FFFD: the input is probably malformed for the chosen ' +
       'encoding. Reported once per input.',
   },
+
+  missingDirective: {
+    code: 'DSL2001',
+    severity: 'warning',
+    summary: 'A mandatory directive (#NAME, #INDEX_LANGUAGE or #CONTENTS_LANGUAGE) is missing.',
+  },
+  malformedDirective: {
+    code: 'DSL2002',
+    severity: 'warning',
+    summary:
+      'A directive has no name or its value is not enclosed in double quotes; the value is ' +
+      'taken as is.',
+  },
+  duplicateDirective: {
+    code: 'DSL2003',
+    severity: 'warning',
+    summary: 'A directive occurs more than once in the header; the first occurrence is used.',
+  },
+  unknownDirective: {
+    code: 'DSL2004',
+    severity: 'info',
+    summary: 'A header directive is not known; it is kept as is.',
+  },
+  unknownLanguage: {
+    code: 'DSL2005',
+    severity: 'warning',
+    summary: 'A language directive names a language unknown to Lingvo (names are case-sensitive).',
+  },
+  misplacedDirective: {
+    code: 'DSL2006',
+    severity: 'warning',
+    summary: 'A line starting with # after the header is ignored; escape it as \\# for a headword.',
+  },
+  unclosedComment: {
+    code: 'DSL2101',
+    severity: 'error',
+    summary: 'A {{ comment is not closed: it swallows the rest of the input.',
+  },
+  orphanBodyLine: {
+    code: 'DSL2201',
+    severity: 'warning',
+    summary: 'An indented line before the first headword is ignored.',
+  },
+  blankLineAfterHeadword: {
+    code: 'DSL2202',
+    severity: 'warning',
+    summary: 'Blank lines between headwords or between the headwords and the body are skipped.',
+  },
+  blankLineInBody: {
+    code: 'DSL2203',
+    severity: 'warning',
+    summary: 'Blank lines inside a body are skipped; the body goes on after them.',
+  },
+  missingBody: {
+    code: 'DSL2204',
+    severity: 'warning',
+    summary: 'The input ends after headwords without a body; the entry has an empty body.',
+  },
+  unclosedSubentry: {
+    code: 'DSL2301',
+    severity: 'warning',
+    summary:
+      'A sub-entry is not closed by a lone @ before the next sub-entry or the end of the entry.',
+  },
+  strayEndOfSubentry: {
+    code: 'DSL2302',
+    severity: 'warning',
+    summary: 'A lone @ closes no open sub-entry.',
+  },
 } as const satisfies Record<string, DiagnosticSpec>;
 
 /** Symbolic name of a diagnostic, e.g. `unknownCodePage`. */
