@@ -6,7 +6,11 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
-    "rootDir": "."
+    "rootDir": ".",
+    "paths": {
+      "dsl-dicts": ["./src/index.ts"],
+      "dsl-dicts/*": ["./src/*/index.ts"]
+    }
   },
   "include": ["src", "test", "vitest.config.ts"]
 }

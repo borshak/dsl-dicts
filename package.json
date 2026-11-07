@@ -1,14 +1,15 @@
 {
   "name": "dsl-dicts",
   "version": "2.0.0-beta.0",
-  "description": "DSL Dictionaries support",
+  "description": "Streaming parser for ABBYY Lingvo DSL dictionaries (.dsl, .dsl.dz) for Node.js and browsers: a lossless AST, plugins, JSONL export and a CLI.",
   "type": "module",
   "sideEffects": false,
   "engines": {
     "node": ">=22.12"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -43,7 +44,8 @@
     "lint": "biome ci .",
     "format": "biome format --write .",
     "check:package": "publint && attw --pack . --profile esm-only",
-    "ci": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:package && npm run check:package"
+    "ci": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:package && npm run check:package",
+    "docs": "vitest run --project node test/docs/sync.test.ts --update"
   },
   "repository": {
     "type": "git",
@@ -51,7 +53,20 @@
   },
   "keywords": [
     "dsl",
-    "dictionary"
+    "lingvo",
+    "abbyy",
+    "abbyy-lingvo",
+    "goldendict",
+    "dictionary",
+    "dictionaries",
+    "dsl-dictionary",
+    "dictzip",
+    "parser",
+    "ast",
+    "jsonl",
+    "streaming",
+    "cli",
+    "typescript"
   ],
   "author": "Alexander Borshak",
   "license": "MIT",

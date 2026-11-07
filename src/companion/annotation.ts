@@ -75,7 +75,8 @@ export type ParseAnnotationOptions = DecodeDslOptions;
  * @returns The annotation. Problems are reported as diagnostics; see the `diagnostics` and
  * `strict` options.
  * @throws DslError for invalid arguments (`DSL0001`, `DSL1002`, `DSL1003`), unreadable
- * input (`DSL1001`) or, in strict mode, a diagnostic of severity `error`.
+ * input (`DSL1001`) or, in strict mode, a diagnostic of the strict severity or a more severe
+ * one.
  */
 export async function parseAnnotation(
   source: DslSource,

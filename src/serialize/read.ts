@@ -162,9 +162,9 @@ function checkExpectations(header: JsonlHeaderRecord, expect: JsonlExpectations)
  *
  * `text` is the document as text, in any chunks: the lines as `toJsonl` writes them (each
  * ends with a newline), or the pieces of a stream (a record may span chunks). A line that
- * ends without a newline is joined with the next chunk. Blank lines are ignored. The header is read and checked with
- * {@link parseJsonlHeader} before `readJsonl` resolves; the records are read as they are
- * iterated.
+ * ends without a newline is joined with the next chunk. Blank lines are ignored. The header
+ * is read and checked with {@link parseJsonlHeader} before `readJsonl` resolves; the records
+ * are read as they are iterated.
  *
  * The payload of the entries is not checked: `T` (default `unknown`) is what the caller
  * asserts it to be, typically after checking the plugin with `expect`.

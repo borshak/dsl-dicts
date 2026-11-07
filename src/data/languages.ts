@@ -5,7 +5,7 @@
  * Sources (cross-checked):
  * - DSL manual by Anatoly (https://anatoly.dev/dsl-manual/), "Languages supported in Lingvo".
  *   Primary source for names, Windows LCIDs, legacy ids and the support status of each language.
- * - Mostitsky DSL Reference (https://github.com/yozhic/DSL-Reference, `langs.html`,
+ * - DSL Reference (https://github.com/yozhic/DSL-Reference, `langs.html`,
  *   `tag_handling.html`): same table, used to confirm the above.
  * - GoldenDict (https://github.com/goldendict/goldendict, `dsl_details.cc`, `dsl.cc`,
  *   `langcoder.cc`): the id-to-language table behind `[lang id=...]` handling. It confirms every

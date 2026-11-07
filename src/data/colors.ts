@@ -3,7 +3,7 @@
  *
  * Lingvo accepts the HTML (CSS) named colors, written in lowercase only: `[c red]` is valid,
  * `[c Red]` is a compiler error. Sources: the DSL manual by Anatoly
- * (https://anatoly.dev/dsl-manual/, "DSL color palette") and the Mostitsky DSL Reference
+ * (https://anatoly.dev/dsl-manual/, "DSL color palette") and the DSL Reference
  * (https://github.com/yozhic/DSL-Reference, `colors.html`).
  *
  * Discrepancies in the sources: the palette chapter claims 136 colors but lists 140 distinct CSS

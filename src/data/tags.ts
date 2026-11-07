@@ -1,7 +1,7 @@
 /**
  * Minimal registry of DSL tags.
  *
- * Sources: the DSL manual by Anatoly (https://anatoly.dev/dsl-manual/) and the Mostitsky DSL
+ * Sources: the DSL manual by Anatoly (https://anatoly.dev/dsl-manual/) and the DSL
  * Reference (https://github.com/yozhic/DSL-Reference, `tag_*.html`). Tag names are lowercase
  * only; Lingvo rejects `[B]`.
  *

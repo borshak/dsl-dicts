@@ -18,7 +18,7 @@ export interface ToJsonlOptions {
   /**
    * End the document with a summary record: the entry count and the diagnostics by code,
    * all of them, of every layer and of the plugin (`ParsedDsl.diagnosticCounts()` at the end
-   * of the export).
+   * of the export). Default `false`.
    */
   readonly summary?: boolean;
 }

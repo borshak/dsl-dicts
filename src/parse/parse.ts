@@ -116,6 +116,7 @@ export interface DslEntry<
 export interface ParsedDsl<TEntry = DslEntry> {
   /**
    * Resolves once the header is complete: at the first entry line, or at the end of input.
+   * Awaiting it before reading entries reads ahead that far and buffers what was read.
    * Rejects with the error that stopped reading, or with `DSL0003` if reading was stopped
    * before the header was complete.
    */
