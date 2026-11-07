@@ -1,10 +1,47 @@
 {
   "name": "dsl-dicts",
-  "version": "1.0.4",
+  "version": "2.0.0-beta.0",
   "description": "DSL Dictionaries support",
-  "main": "src/main.js",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
+    },
+    "./article": {
+      "types": "./dist/article/index.d.ts",
+      "default": "./dist/article/index.js"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "default": "./dist/plugins/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsl-dicts": "./dist/cli.js"
+  },
   "scripts": {
-    "test": "jest"
+    "build": "tsc -b",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc -p tsconfig.core.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome ci .",
+    "format": "biome format --write .",
+    "check:package": "publint && attw --pack . --profile esm-only",
+    "ci": "npm run lint && npm run typecheck && npm run build && npm test && npm run check:package"
   },
   "repository": {
     "type": "git",
@@ -21,6 +58,13 @@
   },
   "homepage": "https://github.com/borshak/dsl-dicts#readme",
   "devDependencies": {
-    "jest": "^23.6.0"
+    "@arethetypeswrong/cli": "0.18.5",
+    "@biomejs/biome": "2.6.6",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.1.0",
+    "publint": "0.3.25",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
   }
 }
