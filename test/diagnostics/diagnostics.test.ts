@@ -26,9 +26,9 @@ describe('diagnostic catalog', () => {
     expect([...codes].sort()).toEqual(codes);
   });
 
-  it('keeps codes of thrown errors in the API, input and plugin failure ranges', () => {
+  it('keeps codes of thrown errors in the API, input, plugin failure and serialization ranges', () => {
     for (const [, spec] of specs) {
-      if ('thrown' in spec) expect(spec.code, spec.code).toMatch(/^DSL[015]0/);
+      if ('thrown' in spec) expect(spec.code, spec.code).toMatch(/^DSL[0157]0/);
     }
   });
 

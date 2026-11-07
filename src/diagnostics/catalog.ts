@@ -14,6 +14,8 @@
  * - `DSL6xxx`: companion files. `DSL60xx` are problems with the content of an abbreviations
  *   file (`parseAbbreviations`); `DSL61xx` are problems with finding or reading the files
  *   next to a dictionary (`dsl-dicts/node`).
+ * - `DSL7xxx`: serialization. All are thrown as a `DslError`: a JSONL document that is not
+ *   readable by this version (`readJsonl`), or output that cannot be serialized (`toJsonl`).
  *
  * Codes are stable: once released, a code keeps its meaning and is never reused.
  *
@@ -423,6 +425,47 @@ export const DIAGNOSTICS = {
     code: 'DSL6102',
     severity: 'warning',
     summary: 'A companion file named explicitly in the options does not exist; it is ignored.',
+  },
+
+  invalidJsonl: {
+    code: 'DSL7001',
+    severity: 'error',
+    summary:
+      'The input is not a dsl-dicts JSONL document: the header record is missing or malformed, ' +
+      'or its format is not dsl-dicts/jsonl.',
+    thrown: true,
+  },
+  unsupportedFormatVersion: {
+    code: 'DSL7002',
+    severity: 'error',
+    summary: 'The major version of the JSONL format is not one this version can read.',
+    thrown: true,
+  },
+  unsupportedAstVersion: {
+    code: 'DSL7003',
+    severity: 'error',
+    summary: 'The AST version of the JSONL document differs from the one the reader expects.',
+    thrown: true,
+  },
+  unsupportedPlugin: {
+    code: 'DSL7004',
+    severity: 'error',
+    summary:
+      'The plugin of the JSONL document differs from the one the reader expects, by name or ' +
+      'by major version of its output format.',
+    thrown: true,
+  },
+  invalidRecord: {
+    code: 'DSL7005',
+    severity: 'error',
+    summary: 'A JSONL record is not valid JSON, not an object, or has no type.',
+    thrown: true,
+  },
+  notSerializable: {
+    code: 'DSL7006',
+    severity: 'error',
+    summary: 'An entry or the output of a plugin cannot be serialized to JSON.',
+    thrown: true,
   },
 } as const satisfies Record<string, DiagnosticSpec>;
 

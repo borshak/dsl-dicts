@@ -9,6 +9,7 @@ import type { DslSource } from '../decode/source.js';
 import {
   createDiagnostic,
   createStrictSink,
+  DIAGNOSTICS,
   type DiagnosticSink,
   DslError,
 } from '../diagnostics/index.js';
@@ -23,6 +24,20 @@ import { normalizeLabel, toPlainText } from '../render/plain-text.js';
  * @experimental
  */
 export type ParseAbbreviationsOptions = DecodeOptions;
+
+/**
+ * A sink that drops `DSL2001` (a missing mandatory directive): abbreviations files often have
+ * no header at all, and reporting that for every dictionary is noise.
+ */
+function withoutMissingDirectives(sink: DiagnosticSink | undefined): DiagnosticSink | undefined {
+  return sink === undefined
+    ? undefined
+    : {
+        report(diagnostic) {
+          if (diagnostic.code !== DIAGNOSTICS.missingDirective.code) sink.report(diagnostic);
+        },
+      };
+}
 
 /**
  * Parses the abbreviations file of a dictionary (`_abrv.dsl`, or `_abrv.dsl.dz`) into a map
@@ -41,6 +56,9 @@ export type ParseAbbreviationsOptions = DecodeOptions;
  * - Value: the plain text of the first body line with text.
  * - A key defined more than once keeps its first expansion (`DSL6001`); an entry without a
  *   body text is skipped (`DSL6002`).
+ *
+ * An abbreviations file is not required to have a header, so a missing `#NAME`,
+ * `#INDEX_LANGUAGE` or `#CONTENTS_LANGUAGE` (`DSL2001`) is not reported.
  *
  * The map is in file order. Keys are normalized with the same function as the `[p]` lookup of
  * `toPlainText`, so the map can be passed to it and to `parseDsl` as is.
@@ -64,10 +82,14 @@ export async function parseAbbreviations(
   if (typeof options !== 'object' || options === null) {
     throw DslError.of('invalidArgument', 'Options must be an object.');
   }
-  const parsed = parseDsl(source, { ...options, body: 'raw', positions: false });
-  const sink: DiagnosticSink | undefined = options.strict
-    ? createStrictSink(options.diagnostics)
-    : options.diagnostics;
+  const inner = withoutMissingDirectives(options.diagnostics);
+  const parsed = parseDsl(source, {
+    ...options,
+    diagnostics: inner,
+    body: 'raw',
+    positions: false,
+  });
+  const sink: DiagnosticSink | undefined = options.strict ? createStrictSink(inner) : inner;
   const abbreviations = new Map<string, string>();
   for await (const batch of parsed.batches()) {
     for (const entry of batch) {

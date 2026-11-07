@@ -127,4 +127,25 @@ export {
   segmentDsl,
   type TextBodyLine,
 } from './segment/index.js';
+export {
+  createDiagnosticTally,
+  createJsonlHeader,
+  type DiagnosticTally,
+  JSONL_FORMAT,
+  JSONL_FORMAT_VERSION,
+  type JsonlComponent,
+  type JsonlEntryRecord,
+  type JsonlExpectations,
+  type JsonlHeaderInit,
+  type JsonlHeaderRecord,
+  type JsonlReader,
+  type JsonlRecord,
+  type JsonlSummaryRecord,
+  parseJsonlHeader,
+  readJsonl,
+  type ToJsonlOptions,
+  type ToJsonOptions,
+  toJson,
+  toJsonl,
+} from './serialize/index.js';
 export { VERSION } from './version.js';

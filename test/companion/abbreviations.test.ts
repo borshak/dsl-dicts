@@ -95,6 +95,19 @@ describe('parseAbbreviations', () => {
     expect(sink.diagnostics.map((d) => d.code)).toEqual(['DSL6001']);
   });
 
+  it('does not report a missing header: abbreviations files often have none', async () => {
+    const sink = createCollectingSink();
+    const map = await parseAbbreviations('adj.\n\tadjective\n', { diagnostics: sink });
+    expect([...map]).toEqual([['adj.', 'adjective']]);
+    expect(sink.diagnostics).toEqual([]);
+    const strict = await parseAbbreviations('#NAME "a"\nadj.\n\tadjective\n', { strict: true });
+    expect(strict.size).toBe(1);
+    // Other problems of the header are still reported.
+    const odd = createCollectingSink();
+    await parseAbbreviations('#NAME a\nadj.\n\tadjective\n', { diagnostics: odd });
+    expect(odd.diagnostics.map((d) => d.code)).toEqual(['DSL2002']);
+  });
+
   it('skips entries without text and reports DSL6002', async () => {
     const sink = createCollectingSink();
     const map = await parseAbbreviations(`${HEADER}a\nb\n\t\n\t[s]x.wav[/s]\nc\n\tok\nd\n`, {

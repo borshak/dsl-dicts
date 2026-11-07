@@ -1,6 +1,7 @@
 /**
  * Packs the package, installs the tarball into a throwaway project and checks it the way a
- * consumer would: `require()` (require(esm)) and `import` of every entry point, and the bin.
+ * consumer would: `require()` (require(esm)) and `import` of every entry point, and the bin, which
+ * converts a synthetic dictionary whose output is read back with the installed `readJsonl`.
  *
  * Run after `npm run build`.
  */
@@ -55,6 +56,14 @@ const entries = [
   ['dsl-dicts', 'parseAbbreviations', null],
   ['dsl-dicts', 'parseAnnotation', null],
   ['dsl-dicts', 'normalizeLabel', null],
+  ['dsl-dicts', 'toJsonl', null],
+  ['dsl-dicts', 'toJson', null],
+  ['dsl-dicts', 'readJsonl', null],
+  ['dsl-dicts', 'parseJsonlHeader', null],
+  ['dsl-dicts', 'createJsonlHeader', null],
+  ['dsl-dicts', 'createDiagnosticTally', null],
+  ['dsl-dicts', 'JSONL_FORMAT', 'dsl-dicts/jsonl'],
+  ['dsl-dicts', 'JSONL_FORMAT_VERSION', 1],
   ['dsl-dicts/node', 'describeRuntime', null],
   ['dsl-dicts/node', 'openDsl', null],
   ['dsl-dicts/node', 'findDictionaries', null],
@@ -199,6 +208,49 @@ try {
   if (printed !== version)
     throw new Error(`dsl-dicts --version printed "${printed}", expected "${version}"`);
   console.log(`bin dsl-dicts --version: ${printed}`);
+
+  // The bin converts a dictionary; the installed reader validates the output.
+  const dictionary = join(project, 'syn.dsl');
+  writeFileSync(
+    dictionary,
+    '#NAME "Syn"\n#INDEX_LANGUAGE "English"\n#CONTENTS_LANGUAGE "Russian"\n' +
+      'cat\n\t[m1][p]n[/p] [trn]кошка[/trn]\ndog\n\t[m1][trn]собака[/trn]\n',
+  );
+  const run = (...args) =>
+    isWindows
+      ? execFileSync(`"${bin}" ${args.map((a) => `"${a}"`).join(' ')}`, {
+          cwd: project,
+          encoding: 'utf8',
+          shell: true,
+        })
+      : execFileSync(bin, args, { cwd: project, encoding: 'utf8' });
+  const outputs = {};
+  for (const view of ['article', 'ast']) {
+    outputs[view] = run('convert', dictionary, '--view', view, '--summary');
+  }
+  writeFileSync(join(project, 'outputs.json'), JSON.stringify(outputs));
+  const checkConvert = `import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { AST_VERSION, readJsonl } from 'dsl-dicts';
+import { article } from 'dsl-dicts/article';
+const outputs = JSON.parse(readFileSync('outputs.json', 'utf8'));
+for (const [view, text] of Object.entries(outputs)) {
+  const expect = view === 'ast'
+    ? { astVersion: AST_VERSION, plugin: null }
+    : { astVersion: AST_VERSION, plugin: { name: article.name, version: article.version } };
+  const { header, records } = await readJsonl([text], expect);
+  assert.equal(header.dictionary.name, 'Syn');
+  const list = [];
+  for await (const record of records) list.push(record);
+  assert.deepEqual(list.map((r) => r.type), ['entry', 'entry', 'summary']);
+  assert.equal(list.at(-1).entries, 2);
+  if (view === 'article') assert.deepEqual(list[0].data.senses[0].translations, ['кошка']);
+  else assert.equal(list[1].data.headwords[0].text, 'dog');
+  console.log('ok convert --view', view, list.length, 'records');
+}
+`;
+  writeFileSync(join(project, 'check-convert.mjs'), checkConvert);
+  process.stdout.write(node(['check-convert.mjs'], project));
 } finally {
   rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

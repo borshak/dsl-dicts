@@ -45,6 +45,33 @@ describe('findDictionaries', () => {
     ]);
   });
 
+  it('lists a dictionary in several forms once, as the uncompressed file if there is one', async () => {
+    const dir = tempDir();
+    writeFiles(dir, {
+      'x.dsl': 'x',
+      'x.dsl.dz': 'x',
+      'x.DSL.GZ': 'x',
+      'y.dsl.gz': 'x',
+      'y.dsl.dz': 'x',
+      'Z.DSL.DZ': 'x',
+      'z.dsl': 'x',
+      'w.DSL': 'x',
+      'w.dsl.dz': 'x',
+      'sub/x.dsl.dz': 'x',
+      'sub/x_abrv.dsl': 'x',
+    });
+    const names = (found: string[]) =>
+      found.map((p) => p.slice(dir.length + 1).replaceAll('\\', '/'));
+    expect(names(await findDictionaries(dir))).toEqual(['w.DSL', 'x.dsl', 'y.dsl.dz', 'z.dsl']);
+    expect(names(await findDictionaries(dir, { recursive: true }))).toEqual([
+      'w.DSL',
+      'x.dsl',
+      'y.dsl.dz',
+      'z.dsl',
+      'sub/x.dsl.dz',
+    ]);
+  });
+
   it('returns nothing for an empty directory, and does not list directories', async () => {
     const dir = tempDir();
     writeFiles(dir, { 'x.dsl/inner.txt': 'x' });
