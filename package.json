@@ -1,6 +1,6 @@
 {
   "name": "dsl-dicts",
-  "version": "2.0.0-beta.0",
+  "version": "2.0.0",
   "description": "Streaming parser for ABBYY Lingvo DSL dictionaries (.dsl, .dsl.dz) for Node.js and browsers: a lossless AST, plugins, JSONL export and a CLI.",
   "type": "module",
   "sideEffects": false,
@@ -45,7 +45,8 @@
     "format": "biome format --write .",
     "check:package": "publint && attw --pack . --profile esm-only",
     "ci": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:package && npm run check:package",
-    "docs": "vitest run --project node test/docs/sync.test.ts --update"
+    "docs": "vitest run --project node test/docs/sync.test.ts --update",
+    "prepublishOnly": "npm run clean && npm run ci"
   },
   "repository": {
     "type": "git",

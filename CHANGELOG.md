@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [Semantic Versioning](https://semver.org/) (see [STABILITY.md](STABILITY.md)).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-11-07
 
 A complete rewrite in TypeScript, with a new API. See [MIGRATION.md](MIGRATION.md) for the
 upgrade from 1.x.
@@ -94,7 +94,7 @@ phrases (headword, transcription, translations and examples).
 
 The initial implementation.
 
-[2.0.0]: https://github.com/borshak/dsl-dicts/compare/56cd482...v2
+[2.0.0]: https://github.com/borshak/dsl-dicts/compare/56cd482...v2.0.0
 [1.0.4]: https://github.com/borshak/dsl-dicts/commit/56cd482
 [1.0.3]: https://github.com/borshak/dsl-dicts/commit/a3f9b75
 [1.0.2]: https://github.com/borshak/dsl-dicts/commit/c334427
