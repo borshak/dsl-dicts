@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TagNode } from '../../src/index.js';
+import { resolveLanguageName, type TagNode } from '../../src/index.js';
 import { parse } from './helpers.js';
 
 function tag(text: string): { node: TagNode; codes: readonly string[] } {
@@ -53,10 +53,20 @@ describe('attributes', () => {
       node: { attrs: { id: 9999 } },
       codes: ['DSL4106'],
     });
-    expect(tag('[lang name="english"]x[/lang]')).toMatchObject({
-      node: { attrs: { name: 'english' } },
+    expect(tag('[lang name="Klingon"]x[/lang]')).toMatchObject({
+      node: { attrs: { name: 'Klingon' } },
       codes: ['DSL4106'],
     });
+  });
+
+  it('keeps inexact language names as written, with an info diagnostic', () => {
+    for (const name of ['english', 'Spanish', 'RUSSIANSTANDARD']) {
+      const { nodes, diagnostics } = parse(`[lang name="${name}"]x[/lang]`);
+      expect((nodes[0] as TagNode).attrs).toEqual({ name });
+      expect(diagnostics).toMatchObject([{ code: 'DSL4107', severity: 'info' }]);
+      expect(resolveLanguageName(name)?.exact).toBe(false);
+    }
+    expect(parse('[lang name="english"]x[/lang]').diagnostics[0]?.message).toContain('English');
   });
 
   it('reports [lang] without attributes and malformed ones', () => {

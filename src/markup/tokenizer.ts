@@ -104,6 +104,19 @@ export function flipCase(ch: string): string {
   return lower === ch ? ch.toUpperCase() : lower;
 }
 
+/**
+ * Tells whether a text token of headword mode is an escaped space (`\ `), which the tokenizer
+ * emits as a token of its own.
+ */
+export function isEscapedSpace(t: Token, text: string): boolean {
+  return (
+    t.kind === 'text' &&
+    t.end - t.start === 2 &&
+    t.value === NO_BREAK_SPACE &&
+    text.charCodeAt(t.start) === BACKSLASH
+  );
+}
+
 /** Length of the character at `i`: 2 for a surrogate pair, else 1. */
 function charLength(text: string, i: number, to: number): number {
   const c = text.charCodeAt(i);
@@ -135,7 +148,8 @@ function charLength(text: string, i: number, to: number): number {
  *   digit, punctuation, another `^`, the end of the line) the flip would do nothing, so the
  *   `^` is literal (`DSL4004`): real dictionaries contain such literal carets.
  * - In headword mode, `{ } ( )` are `punct` tokens and `^` is literal, except in `^~`
- *   (GoldenDict expands `^~` in headwords; Lingvo knows no other `^` there).
+ *   (GoldenDict expands `^~` in headwords; Lingvo knows no other `^` there). An escaped space
+ *   is a text token of its own (see {@link isEscapedSpace}).
  *
  * The tokenizer keeps the `[s]`/`[video]` nesting count across lines, so use one instance
  * per text.
@@ -260,6 +274,16 @@ export class Tokenizer {
         case S_ESCAPE: {
           // `i` is the escaped character; `mark` is at the backslash.
           const n = charLength(text, i, to);
+          if (c === SPACE && this.headword && this.media === 0) {
+            // A token of its own, so that the headword parser can tell it from a literal
+            // U+00A0: it is a no-break space when shown but a plain space in index forms.
+            this.emitText(i - 1);
+            this.out.push(token('text', this.lineIndex, i - 1, i + 1, NO_BREAK_SPACE));
+            this.mark = i + 1;
+            i++;
+            state = S_TEXT;
+            break;
+          }
           let ch = c === SPACE && this.media === 0 ? NO_BREAK_SPACE : text.slice(i, i + n);
           if (flip) {
             const flipped = flipCase(ch);

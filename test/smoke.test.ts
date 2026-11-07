@@ -21,6 +21,7 @@ describe('package skeleton', () => {
 
   it('article and plugins entries are importable', () => {
     expect(article.MODULE).toBe('article');
-    expect(plugins.MODULE).toBe('plugins');
+    expect(plugins.plainText.name).toBe('plain-text');
+    expect(plugins.searchText.name).toBe('search-text');
   });
 });

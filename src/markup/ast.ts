@@ -67,7 +67,12 @@ export interface TagAttributes {
   readonly color?: string;
   /** `[lang id=1033]`: a Windows LCID or a legacy Lingvo id (1-30). */
   readonly id?: number;
-  /** `[lang name="English"]`: a Lingvo language name (case-sensitive). */
+  /**
+   * `[lang name="English"]`: a Lingvo language name, as written. Lingvo names are
+   * case-sensitive; an inexact name that GoldenDict would accept (`english`, `Spanish`) is
+   * kept as is, with `DSL4107`. Resolve it with `resolveLanguageName`, and an `id` with
+   * `findLanguageById`: attributes hold what is written, not what it means.
+   */
   readonly name?: string;
   /** `[ref dict="..."]`: the name of the dictionary the link points to. */
   readonly dict?: string;
@@ -97,6 +102,7 @@ export interface TagNode extends NodeLocation {
    * and with escapes unresolved; absent if empty. Unknown tags have only this.
    */
   readonly rawAttrs?: string;
+  /** The content, in order; may be empty (`[b][/b]`). */
   readonly children: readonly MarkupNode[];
 }
 
@@ -122,6 +128,7 @@ export interface LineBreakNode extends NodeLocation {
  */
 export interface LinkNode extends NodeLocation {
   readonly type: 'link';
+  /** The target as written: `text` and `tilde` nodes. */
   readonly children: readonly MarkupNode[];
 }
 
@@ -151,6 +158,7 @@ export interface SubentryNode extends NodeLocation {
    * and `variants` (see {@link Headword}).
    */
   readonly headwords: readonly Headword[];
+  /** The sub-entry's content, from the line after its headwords to the closing `@`. */
   readonly children: readonly MarkupNode[];
 }
 
@@ -192,8 +200,9 @@ export interface Headword extends NodeLocation {
    * The index forms: what the headword is listed, sorted and searched under. Every
    * combination of the optional parts, in a deterministic order (each part left out before
    * it is included, the leftmost part varying slowest: `color`, `colors`, `colour`,
-   * `colours`). Without the unsortable part and tags, with escapes resolved and `~`
-   * substituted, spaces and tabs collapsed and trimmed; empty forms and duplicates are
+   * `colours`). Without the unsortable part and tags, with escapes resolved (an escaped space
+   * `\ ` is a plain space here, as in GoldenDict, while `display` and `text` keep U+00A0) and
+   * `~` substituted, spaces and tabs collapsed and trimmed; empty forms and duplicates are
    * removed. Empty when the headword has no sortable text (`DSL3201`).
    *
    * Limits: a headword whose sortable text is longer than 500 characters is not expanded
@@ -224,7 +233,8 @@ export type ParentNode = TagNode | LinkNode | SubentryNode;
 
 /**
  * Makes every property of a type read-only, recursively. AST types are already read-only; this
- * helper is for plugins that build their own types from them.
+ * helper is for types built from them, such as the entry a plugin receives (`PluginEntry`,
+ * `DeepReadonly<DslEntry>`).
  *
  * @experimental
  */

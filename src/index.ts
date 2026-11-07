@@ -6,9 +6,6 @@
  * @packageDocumentation
  */
 
-/** Current package version. Keep in sync with `package.json`. */
-export const VERSION = '2.0.0-beta.0';
-
 export {
   findLanguageById,
   findLanguageByName,
@@ -83,6 +80,26 @@ export {
   parseDsl,
 } from './parse/index.js';
 export {
+  createDictionaryContext,
+  createPluginDiagnostic,
+  type DictionaryContext,
+  type DictionaryContextInit,
+  type DslPlugin,
+  definePlugin,
+  type EntryTransform,
+  type PluginDiagnosticDetails,
+  type PluginEntry,
+  type PluginUse,
+  setupPlugin,
+} from './plugin/index.js';
+export {
+  hasZones,
+  type PlainTextOptions,
+  SEARCH_ZONES,
+  toPlainText,
+  zoneText,
+} from './render/index.js';
+export {
   type BodyLine,
   type BodyLineKind,
   createSegmenter,
@@ -101,3 +118,4 @@ export {
   segmentDsl,
   type TextBodyLine,
 } from './segment/index.js';
+export { VERSION } from './version.js';

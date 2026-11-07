@@ -8,6 +8,9 @@
  * - `DSL2xxx`: line segmentation (header, cards, sub-entries, comments).
  * - `DSL3xxx`: headwords.
  * - `DSL4xxx`: body markup.
+ * - `DSL5xxx`: plugins. `DSL50xx` are failures of a plugin, always thrown as a `DslError` that
+ *   names the plugin; `DSL51xx` are diagnostics that plugins report through
+ *   `DictionaryContext.diagnostics`.
  *
  * Codes are stable: once released, a code keeps its meaning and is never reused.
  *
@@ -322,6 +325,13 @@ export const DIAGNOSTICS = {
     summary:
       'An attribute value is unknown (a color name, language id or language name); it is kept.',
   },
+  inexactLanguageName: {
+    code: 'DSL4107',
+    severity: 'info',
+    summary:
+      'A [lang name="..."] names a Lingvo language inexactly (case, or without an ending such ' +
+      'as ModernSort); the name is kept as written and resolveLanguageName resolves it.',
+  },
   strayClosingTag: {
     code: 'DSL4201',
     severity: 'warning',
@@ -362,6 +372,29 @@ export const DIAGNOSTICS = {
     code: 'DSL4207',
     severity: 'warning',
     summary: 'Tags are nested more than 64 levels deep; the extra opening tag is kept as text.',
+  },
+
+  pluginSetupFailed: {
+    code: 'DSL5001',
+    severity: 'error',
+    summary:
+      "A plugin's setup threw or did not return a function; the original error is the cause.",
+    thrown: true,
+  },
+  pluginFailed: {
+    code: 'DSL5002',
+    severity: 'error',
+    summary:
+      'A plugin threw while processing an entry; the original error is the cause, and the ' +
+      "error has the plugin's name and the entry's position.",
+    thrown: true,
+  },
+  pluginDiagnostic: {
+    code: 'DSL5101',
+    severity: 'warning',
+    summary:
+      'A plugin reports a problem with an entry or the dictionary; the message names the ' +
+      'plugin, and the plugin may set any severity.',
   },
 } as const satisfies Record<string, DiagnosticSpec>;
 

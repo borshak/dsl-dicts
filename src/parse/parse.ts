@@ -18,6 +18,14 @@ import { parseHeadwords } from '../headword/parse.js';
 import type { Headword, MarkupNode } from '../markup/ast.js';
 import { parseBody } from '../markup/parse.js';
 import {
+  createDictionaryContext,
+  type DslPlugin,
+  definePlugin,
+  type EntryTransform,
+  type PluginUse,
+  setupPlugin,
+} from '../plugin/plugin.js';
+import {
   type BodyLine,
   type DslHeader,
   type RawEntry,
@@ -50,18 +58,25 @@ export interface ParseDslOptions extends DecodeOptions {
   readonly positions?: boolean;
   /** Parse bodies (`ast`, the default) or keep the raw body lines (`raw`). */
   readonly body?: BodyMode;
+  /**
+   * Abbreviations for `[p]` labels (from `_abrv.dsl`), passed to plugins as
+   * `DictionaryContext.abbreviations`. Not used by the parser itself.
+   */
+  readonly abbreviations?: ReadonlyMap<string, string>;
+  /** The annotation (from the `.ann` file), passed to plugins as `DictionaryContext.annotation`. */
+  readonly annotation?: string;
 }
 
 /**
  * An entry (card): its parsed headwords and its body. Every entry is a fresh plain object.
  *
- * @typeParam TBody - `MarkupNode[]` (the default, `body: 'ast'`) or `BodyLine[]`
- * (`body: 'raw'`). A raw entry can be passed as is to `parseBody`, which then resolves `~` in
- * sub-entry headwords against its headwords.
+ * @typeParam TBody - `readonly MarkupNode[]` (the default, `body: 'ast'`) or
+ * `readonly BodyLine[]` (`body: 'raw'`). A raw entry can be passed as is to `parseBody`,
+ * which then resolves `~` in sub-entry headwords against its headwords.
  * @experimental
  */
 export interface DslEntry<
-  TBody extends readonly MarkupNode[] | readonly BodyLine[] = MarkupNode[],
+  TBody extends readonly MarkupNode[] | readonly BodyLine[] = readonly MarkupNode[],
 > {
   /** The headwords, at least one, in order. */
   readonly headwords: readonly Headword[];
@@ -110,12 +125,50 @@ export interface ParsedDsl<TEntry = DslEntry> {
    */
   entries(): AsyncIterable<TEntry>;
   /**
+   * What a plugin makes of the entries, one per entry, in order.
+   *
+   * Once the header is known, the plugin is set up once with a context built from it and from
+   * the `diagnostics`, `abbreviations` and `annotation` options; its transform is then applied
+   * to each entry as it is read. Errors of the plugin end the iteration as a `DslError`
+   * (`DSL5001` from `setup`, `DSL5002` from the transform, naming the plugin; see
+   * `setupPlugin`).
+   *
+   * @throws DslError `DSL0002` if the entries were already requested; `DSL0001` for an invalid
+   * plugin, or with `body: 'raw'` (plugins need parsed bodies).
+   */
+  entries<TOut, TOptions>(
+    this: ParsedDsl<DslEntry>,
+    use: PluginUse<TOut, TOptions>,
+  ): AsyncIterable<TOut>;
+  /**
    * The entries in non-empty batches: the fastest way to read them. Batch boundaries depend on
    * the chunking of the input and carry no meaning.
    *
    * @throws DslError `DSL0002` if the entries were already requested.
    */
   batches(): AsyncIterable<TEntry[]>;
+  /**
+   * What a plugin makes of the entries, in non-empty batches; see the plugin form of
+   * {@link ParsedDsl.entries}.
+   *
+   * @throws DslError like the plugin form of `entries`.
+   */
+  batches<TOut, TOptions>(
+    this: ParsedDsl<DslEntry>,
+    use: PluginUse<TOut, TOptions>,
+  ): AsyncIterable<TOut[]>;
+}
+
+/** An entry in either body mode. */
+type AnyEntry = DslEntry | DslEntry<readonly BodyLine[]>;
+
+/** The entries claimed for a plugin. */
+interface Plugged<TOut> {
+  readonly batches: AsyncIterator<DslEntry[]>;
+  /** Waits for the header and sets the plugin up. */
+  setup(): Promise<EntryTransform<TOut>>;
+  /** Closes the entries and rethrows the error. */
+  fail(error: unknown): Promise<never>;
 }
 
 /**
@@ -139,33 +192,36 @@ export interface ParsedDsl<TEntry = DslEntry> {
  * }
  * ```
  *
+ * @example With a plugin (from `dsl-dicts/plugins`):
+ * ```ts
+ * for await (const { headwords, text } of parseDsl(bytes).entries({ plugin: plainText })) {
+ *   console.log(headwords.join(', '), text);
+ * }
+ * ```
+ *
  * @throws DslError synchronously for invalid arguments.
  * @experimental
  */
 export function parseDsl(
   source: DslSource,
   options: ParseDslOptions & { readonly body: 'raw' },
-): ParsedDsl<DslEntry<BodyLine[]>>;
+): ParsedDsl<DslEntry<readonly BodyLine[]>>;
 export function parseDsl(
   source: DslSource,
   options?: ParseDslOptions & { readonly body?: 'ast' },
 ): ParsedDsl<DslEntry>;
-export function parseDsl(
-  source: DslSource,
-  options?: ParseDslOptions,
-): ParsedDsl<DslEntry | DslEntry<BodyLine[]>>;
-export function parseDsl(
-  source: DslSource,
-  options: ParseDslOptions = {},
-): ParsedDsl<DslEntry | DslEntry<BodyLine[]>> {
+export function parseDsl(source: DslSource, options?: ParseDslOptions): ParsedDsl<AnyEntry>;
+export function parseDsl(source: DslSource, options: ParseDslOptions = {}): ParsedDsl<AnyEntry> {
   return new ParsedDslImpl(source, options);
 }
 
-class ParsedDslImpl implements ParsedDsl<DslEntry | DslEntry<BodyLine[]>> {
+class ParsedDslImpl implements ParsedDsl<AnyEntry> {
   readonly #segmented: SegmentedDsl;
   readonly #sink: DiagnosticSink | undefined;
   readonly #positions: boolean;
   readonly #raw: boolean;
+  readonly #abbreviations: ReadonlyMap<string, string> | undefined;
+  readonly #annotation: string | undefined;
 
   constructor(source: DslSource, options: ParseDslOptions) {
     if (typeof options !== 'object' || options === null) {
@@ -181,6 +237,13 @@ class ParsedDslImpl implements ParsedDsl<DslEntry | DslEntry<BodyLine[]>> {
     this.#raw = body === 'raw';
     this.#positions = positions;
     this.#sink = options.strict ? createStrictSink(options.diagnostics) : options.diagnostics;
+    // Checked here rather than at the first plugin use, like every other option.
+    const { abbreviations, annotation } = createDictionaryContext({
+      abbreviations: options.abbreviations,
+      annotation: options.annotation,
+    });
+    this.#abbreviations = abbreviations;
+    this.#annotation = annotation;
     this.#segmented = segmentDsl(source, options);
   }
 
@@ -196,19 +259,29 @@ class ParsedDslImpl implements ParsedDsl<DslEntry | DslEntry<BodyLine[]>> {
     return this.#segmented.info;
   }
 
-  entries(): AsyncIterable<DslEntry | DslEntry<BodyLine[]>> {
-    const batches = this.batches()[Symbol.asyncIterator]();
-    let batch: (DslEntry | DslEntry<BodyLine[]>)[] = [];
+  entries<TOut>(use?: PluginUse<TOut, unknown>): AsyncIterable<AnyEntry | TOut> {
+    const plugged = use === undefined ? undefined : this.#plug(use);
+    const batches: AsyncIterator<AnyEntry[]> =
+      plugged?.batches ?? (this.batches()[Symbol.asyncIterator]() as AsyncIterator<AnyEntry[]>);
+    let transform: EntryTransform<TOut> | undefined;
+    let batch: AnyEntry[] = [];
     let index = 0;
-    const iterator: AsyncIterator<DslEntry | DslEntry<BodyLine[]>> = {
+    const iterator: AsyncIterator<AnyEntry | TOut> = {
       next: async () => {
+        if (plugged !== undefined) transform ??= await plugged.setup();
         while (index === batch.length) {
           const next = await batches.next();
           if (next.done) return { value: undefined, done: true };
           batch = next.value;
           index = 0;
         }
-        return { value: batch[index++] as DslEntry, done: false };
+        const entry = batch[index++] as DslEntry;
+        if (transform === undefined) return { value: entry, done: false };
+        try {
+          return { value: transform(entry), done: false };
+        } catch (error) {
+          return (plugged as Plugged<TOut>).fail(error);
+        }
       },
       return: async () => {
         batch = [];
@@ -220,9 +293,10 @@ class ParsedDslImpl implements ParsedDsl<DslEntry | DslEntry<BodyLine[]>> {
     return { [Symbol.asyncIterator]: () => iterator };
   }
 
-  batches(): AsyncIterable<(DslEntry | DslEntry<BodyLine[]>)[]> {
+  batches<TOut>(use?: PluginUse<TOut, unknown>): AsyncIterable<(AnyEntry | TOut)[]> {
+    if (use !== undefined) return this.#pluginBatches(this.#plug(use));
     const raw = this.#segmented.batches()[Symbol.asyncIterator]();
-    const iterator: AsyncIterator<(DslEntry | DslEntry<BodyLine[]>)[]> = {
+    const iterator: AsyncIterator<AnyEntry[]> = {
       next: async () => {
         const next = await raw.next();
         if (next.done) return { value: undefined, done: true };
@@ -236,7 +310,72 @@ class ParsedDslImpl implements ParsedDsl<DslEntry | DslEntry<BodyLine[]>> {
     return { [Symbol.asyncIterator]: () => iterator };
   }
 
-  #entry(entry: RawEntry): DslEntry | DslEntry<BodyLine[]> {
+  #pluginBatches<TOut>(plugged: Plugged<TOut>): AsyncIterable<TOut[]> {
+    const { batches } = plugged;
+    let transform: EntryTransform<TOut> | undefined;
+    const iterator: AsyncIterator<TOut[]> = {
+      next: async () => {
+        transform ??= await plugged.setup();
+        const next = await batches.next();
+        if (next.done) return { value: undefined, done: true };
+        try {
+          return { value: next.value.map(transform), done: false };
+        } catch (error) {
+          return plugged.fail(error);
+        }
+      },
+      return: async () => {
+        await batches.return?.();
+        return { value: undefined, done: true };
+      },
+    };
+    return { [Symbol.asyncIterator]: () => iterator };
+  }
+
+  /**
+   * Checks a plugin and claims the entries for it. The plugin is set up by `setup()`, once the
+   * header is known; any failure closes the entries.
+   */
+  #plug<TOut>(use: PluginUse<TOut, unknown>): Plugged<TOut> {
+    if (typeof use !== 'object' || use === null) {
+      throw DslError.of('invalidArgument', 'The argument must be an object with a plugin.');
+    }
+    const { plugin, options } = use as { plugin: DslPlugin<TOut, unknown>; options?: unknown };
+    definePlugin(plugin);
+    if (this.#raw) {
+      throw DslError.of(
+        'invalidArgument',
+        `Plugin ${plugin.name} needs parsed bodies: use the body option "ast".`,
+      );
+    }
+    const batches = this.batches()[Symbol.asyncIterator]() as AsyncIterator<DslEntry[]>;
+    const fail = async (error: unknown): Promise<never> => {
+      await batches.return?.();
+      throw error;
+    };
+    const setup = async (): Promise<EntryTransform<TOut>> => {
+      let header: DslHeader;
+      try {
+        header = await this.#segmented.header;
+      } catch (error) {
+        return fail(error);
+      }
+      const context = createDictionaryContext({
+        header,
+        diagnostics: this.#sink,
+        abbreviations: this.#abbreviations,
+        annotation: this.#annotation,
+      });
+      try {
+        return setupPlugin(plugin, context, options);
+      } catch (error) {
+        return fail(error);
+      }
+    };
+    return { batches, setup, fail };
+  }
+
+  #entry(entry: RawEntry): AnyEntry {
     const diagnostics: Diagnostic[] = [];
     const outer = this.#sink;
     const sink: DiagnosticSink = {
@@ -250,7 +389,7 @@ class ParsedDslImpl implements ParsedDsl<DslEntry | DslEntry<BodyLine[]>> {
     const body = this.#raw ? entry.body : parseBody({ headwords, body: entry.body }, options);
     const result: DslEntry = {
       headwords,
-      body: body as MarkupNode[],
+      body: body as readonly MarkupNode[],
       position: entry.position,
       end: entry.end,
     };

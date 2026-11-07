@@ -53,6 +53,26 @@
           }
         }
       }
+    },
+    {
+      "includes": ["src/plugins/**", "src/article/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../**", "!../index.js"],
+                    "message": "Built-in plugins use the public API only: import from the package entry point, '../index.js'."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "javascript": {

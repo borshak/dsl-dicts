@@ -47,18 +47,38 @@ function node(args, cwd) {
 const entries = [
   ['dsl-dicts', 'VERSION', version],
   ['dsl-dicts', 'parseDsl', null],
+  ['dsl-dicts', 'createDictionaryContext', null],
+  ['dsl-dicts', 'definePlugin', null],
+  ['dsl-dicts', 'setupPlugin', null],
+  ['dsl-dicts', 'toPlainText', null],
+  ['dsl-dicts', 'zoneText', null],
   ['dsl-dicts/node', 'describeRuntime', null],
   ['dsl-dicts/article', 'MODULE', 'article'],
-  ['dsl-dicts/plugins', 'MODULE', 'plugins'],
+  ['dsl-dicts/plugins', 'plainText', null],
+  ['dsl-dicts/plugins', 'searchText', null],
 ];
 
+// Besides the exports: the built-in plugins run on the packed core, through parseDsl.
 const checkBody = `
 for (const [specifier, name, expected] of ${JSON.stringify(entries)}) {
   const mod = await load(specifier);
   assert.ok(name in mod, specifier + ' must export ' + name);
   if (expected !== null) assert.equal(mod[name], expected, specifier + ' ' + name);
-  console.log('ok', specifier);
 }
+console.log('ok exports');
+const { parseDsl } = await load('dsl-dicts');
+const { plainText, searchText } = await load('dsl-dicts/plugins');
+const text = '#NAME "t"\\n#INDEX_LANGUAGE "English"\\n#CONTENTS_LANGUAGE "English"\\n' +
+  'colo(u)r\\n\\t[m1][b]~[/b] [trn]hue[/trn]\\n';
+const results = [];
+for (const plugin of [plainText, searchText]) {
+  for await (const out of parseDsl(text).entries({ plugin })) results.push(out);
+}
+assert.deepEqual(results, [
+  { headwords: ['colo(u)r'], text: 'color hue' },
+  { headwords: ['color', 'colour'], text: 'hue' },
+]);
+console.log('ok plugins', plainText.name + '@' + plainText.version, searchText.name + '@' + searchText.version);
 `;
 
 // CommonJS has no top-level await: wrap the shared body in an async function.

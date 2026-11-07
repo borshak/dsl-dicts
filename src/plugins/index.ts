@@ -1,8 +1,10 @@
 /**
- * Plugins entry point (optional extensions built on top of the core).
+ * Built-in plugins: projections of parsed entries into plain and search text.
+ *
+ * They are written against the public API of `dsl-dicts` only, like any third-party plugin.
  *
  * @packageDocumentation
  */
 
-/** Marker for the plugins module; replaced by the real API later. */
-export const MODULE = 'plugins';
+export { type PlainTextPluginOptions, type PlainTextResult, plainText } from './plain-text.js';
+export { type SearchTextPluginOptions, type SearchTextResult, searchText } from './search-text.js';

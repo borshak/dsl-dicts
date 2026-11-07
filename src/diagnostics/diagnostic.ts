@@ -82,6 +82,10 @@ export interface DslErrorOptions {
   readonly cause?: unknown;
   /** The diagnostic that caused the error (strict mode). */
   readonly diagnostic?: Diagnostic;
+  /** Name of the plugin that failed (`DSL5xxx`). */
+  readonly plugin?: string;
+  /** Where in the source the error happened, e.g. the entry a plugin failed on. */
+  readonly position?: SourcePosition;
 }
 
 /**
@@ -96,12 +100,18 @@ export class DslError extends Error {
   readonly code: DiagnosticCode;
   /** The diagnostic behind this error, for strict-mode failures. */
   readonly diagnostic?: Diagnostic;
+  /** Name of the plugin that failed, for plugin failures (`DSL5xxx`). */
+  readonly plugin?: string;
+  /** Where in the source the error happened, if known (the entry a plugin failed on). */
+  readonly position?: SourcePosition;
 
   constructor(code: DiagnosticCode, message: string, options: DslErrorOptions = {}) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'DslError';
     this.code = code;
     if (options.diagnostic !== undefined) this.diagnostic = options.diagnostic;
+    if (options.plugin !== undefined) this.plugin = options.plugin;
+    if (options.position !== undefined) this.position = options.position;
   }
 
   /** Creates an error for a catalog entry by its symbolic name. */

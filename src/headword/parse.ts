@@ -18,7 +18,7 @@ import {
 import type { Headword, MarkupNode } from '../markup/ast.js';
 import { TreeBuilder } from '../markup/builder.js';
 import { orderedSink, reporter } from '../markup/report.js';
-import { flipCase, type Token, Tokenizer } from '../markup/tokenizer.js';
+import { flipCase, isEscapedSpace, type Token, Tokenizer } from '../markup/tokenizer.js';
 import { positionInLine, type RawEntry, type RawLine } from '../segment/index.js';
 
 /**
@@ -216,8 +216,10 @@ export function buildHeadword(line: RawLine, context: HeadwordContext): Headword
     switch (t.kind) {
       case 'text':
         if (depth === 0) {
-          append(groups, t.value);
-          flat += t.value;
+          // An escaped space is a no-break space when shown, a plain space in index forms.
+          const value = isEscapedSpace(t, text) ? ' ' : t.value;
+          append(groups, value);
+          flat += value;
         }
         break;
       case 'tilde': {

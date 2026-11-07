@@ -5,7 +5,7 @@
  */
 
 import { isKnownColor } from '../data/colors.js';
-import { findLanguageById, findLanguageByName } from '../data/languages.js';
+import { findLanguageById, resolveLanguageName } from '../data/languages.js';
 import { getMarginLevel, type TagSpec } from '../data/tags.js';
 import type { DiagnosticName } from '../diagnostics/index.js';
 import type { TagAttributes } from './ast.js';
@@ -33,8 +33,9 @@ const KEYS: Readonly<Record<string, readonly string[]>> = {
  * - `lang`, `ref`, `url`: `key=value` pairs separated by spaces; a value is either bare (up to
  *   the next space) or in double quotes, with `\x` escapes resolved. Keys are those of the
  *   schema (`id`/`name`, `dict`/`target`, `target`); the first of repeated keys wins. A
- *   language id or name unknown to Lingvo is kept (`DSL4106`); `[lang]` needs one of them
- *   (`DSL4105`).
+ *   language id or name unknown to Lingvo is kept (`DSL4106`); a name that is not exact but
+ *   resolves leniently (`resolveLanguageName`) is kept as written (`DSL4107`, info);
+ *   `[lang]` needs an id or a name (`DSL4105`).
  * - `none`, and unknown tags: attribute text is ignored (`DSL4103` for registered tags only).
  *
  * The raw text is always kept in the node (`rawAttrs`), so nothing is lost.
@@ -174,15 +175,22 @@ function setPair(
       attrs.id = id;
       return;
     }
-    case 'name':
-      if (findLanguageByName(value) === undefined) {
+    case 'name': {
+      const match = resolveLanguageName(value);
+      if (match === undefined) {
         report(
           'unknownAttributeValue',
           `"${value}" is not a Lingvo language name (names are case-sensitive).`,
         );
+      } else if (!match.exact) {
+        report(
+          'inexactLanguageName',
+          `"${value}" is not an exact Lingvo language name; it resolves to ${match.language.name}.`,
+        );
       }
       attrs.name = value;
       return;
+    }
     case 'dict':
       attrs.dict = value;
       return;

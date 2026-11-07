@@ -25,10 +25,24 @@ describe('plain headwords', () => {
     expect(show(headword.display)).toBe('"a \\t  b"');
   });
 
-  it('keep an escaped trailing space in raw, as a no-break space', () => {
+  it('keep an escaped trailing space in raw, as a no-break space in the display text', () => {
     const { headword } = hw('a\\ ');
     expect(headword.raw).toBe('a\\ ');
-    expect(headword.variants).toEqual([`a${NBSP}`]);
+    expect(headword.text).toBe(`a${NBSP}`);
+    // In index forms it is a plain space, as in GoldenDict, and trimmed like one.
+    expect(headword.variants).toEqual(['a']);
+  });
+
+  it('make an escaped space a plain space in index forms only', () => {
+    const { headword, codes } = hw('a\\ b\\ \\ c(\\ d)');
+    expect(headword.text).toBe(`a${NBSP}b${NBSP}${NBSP}c(${NBSP}d)`);
+    expect(show(headword.display)).toBe(`"a${NBSP}b${NBSP}${NBSP}c(${NBSP}d)"`);
+    expect(headword.variants).toEqual(['a b c', 'a b c d']);
+    expect(codes).toEqual([]);
+  });
+
+  it('keep a literal no-break space in index forms', () => {
+    expect(variants(`a${NBSP}b`)).toEqual([`a${NBSP}b`]);
   });
 
   it('keep case and other characters as they are', () => {

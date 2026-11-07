@@ -66,7 +66,7 @@ describe('parseDsl', () => {
   it('keeps raw bodies for lazy parsing', async () => {
     const dict = parseDsl(TEXT, { body: 'raw' });
     const entries = await collect(dict.entries());
-    expectTypeOf(entries[0]?.body).toEqualTypeOf<BodyLine[] | undefined>();
+    expectTypeOf(entries[0]?.body).toEqualTypeOf<readonly BodyLine[] | undefined>();
     expect(entries[1]?.body.map((l) => l.kind)).toEqual([
       'text',
       'subentry-start',
@@ -80,10 +80,10 @@ describe('parseDsl', () => {
   it('types entries by body mode', () => {
     expectTypeOf(parseDsl(TEXT).entries()).toEqualTypeOf<AsyncIterable<DslEntry>>();
     expectTypeOf(parseDsl(TEXT, { body: 'ast' }).entries()).toEqualTypeOf<
-      AsyncIterable<DslEntry<MarkupNode[]>>
+      AsyncIterable<DslEntry<readonly MarkupNode[]>>
     >();
     expectTypeOf(parseDsl(TEXT, { body: 'raw' }).batches()).toEqualTypeOf<
-      AsyncIterable<DslEntry<BodyLine[]>[]>
+      AsyncIterable<DslEntry<readonly BodyLine[]>[]>
     >();
   });
 
