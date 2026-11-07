@@ -112,7 +112,11 @@ describe('parseDsl with a plugin', () => {
     expect(Object.isFrozen(context)).toBe(true);
     // Reports go to the sink of the options.
     context.diagnostics.report(createPluginDiagnostic(plugin, 'Hello.'));
-    expect(sink.diagnostics.at(-1)).toMatchObject({ code: 'DSL5101', message: 'recorder: Hello.' });
+    expect(sink.diagnostics.at(-1)).toMatchObject({
+      code: 'DSL5101',
+      message: 'recorder: Hello.',
+      source: 'recorder',
+    });
   });
 
   it('yields batches of outputs', async () => {
@@ -312,12 +316,17 @@ describe('manual setup', () => {
       severity: 'info',
       message: 'plain-text: Note.',
       position,
+      source: 'plain-text',
     });
-    expect(createPluginDiagnostic('x', 'Note.')).toEqual({
+    const diagnostic = createPluginDiagnostic('x', 'Note.');
+    expect(diagnostic).toEqual({
       code: 'DSL5101',
       severity: 'warning',
       message: 'x: Note.',
+      source: 'x',
     });
+    // The source survives JSON, like every field but cause.
+    expect(JSON.parse(JSON.stringify(diagnostic))).toEqual(diagnostic);
   });
 
   it('keeps definePlugin an identity', () => {

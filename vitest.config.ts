@@ -18,12 +18,12 @@ export default defineConfig({
         },
       },
       {
-        // The runtime-neutral core only: no node:fs, no legacy CommonJS.
+        // The runtime-neutral core and plugins only: no node:fs.
         extends: true,
         test: {
           name: 'browser',
           include: [
-            'test/{companion,core,data,decode,diagnostics,headword,markup,parse,plugin,plugins,segment}/**/*.test.ts',
+            'test/{article,companion,core,data,decode,diagnostics,headword,markup,parse,plugin,plugins,segment}/**/*.test.ts',
           ],
           browser: {
             enabled: true,

@@ -27,7 +27,7 @@ export interface PlainTextResult {
 export interface PlainTextPluginOptions
   extends Pick<
     PlainTextOptions,
-    'indent' | 'secondary' | 'media' | 'unindexed' | 'labels' | 'subentries'
+    'indent' | 'secondary' | 'media' | 'unindexed' | 'labels' | 'subentries' | 'stress'
   > {
   /**
    * Replace `[p]` labels by their expansion from `DictionaryContext.abbreviations`, when the
@@ -43,6 +43,7 @@ const KEYS = new Set([
   'unindexed',
   'labels',
   'subentries',
+  'stress',
   'expandLabels',
 ]);
 
@@ -83,6 +84,9 @@ function checkOptions(options: PlainTextPluginOptions | undefined): PlainTextPlu
     if (!KEYS.has(key)) {
       throw DslError.of('invalidArgument', `The plain-text plugin has no option ${key}.`);
     }
+  }
+  if (options.stress !== undefined && options.stress !== 'none' && options.stress !== 'combining') {
+    throw DslError.of('invalidArgument', 'The stress option must be "none" or "combining".');
   }
   return options;
 }

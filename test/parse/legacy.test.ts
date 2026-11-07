@@ -31,7 +31,7 @@ describe('legacy fixtures through parseDsl', () => {
       [['they']],
       [['hello']],
     ]);
-    // The legacy parser yields one item per headword: 8.
+    // dsl-dicts 1.x yielded one item per headword: 8.
     expect(entries.flatMap((e) => e.headwords)).toHaveLength(8);
     // The parentheses of the body are text, not optional parts.
     expect(entries[3]?.body).toMatchObject([

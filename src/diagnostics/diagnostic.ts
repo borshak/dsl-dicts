@@ -42,6 +42,12 @@ export interface Diagnostic {
    * or during decoding. Absent for string input.
    */
   readonly byteOffset?: number;
+  /**
+   * Who reported the problem, for diagnostics that do not come from the parser itself: the
+   * name of the plugin, as set by `createPluginDiagnostic`. Absent for the parser's own
+   * diagnostics.
+   */
+  readonly source?: string;
   /** Underlying runtime error, if any. Not serializable; for debugging only. */
   readonly cause?: unknown;
 }

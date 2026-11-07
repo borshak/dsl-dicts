@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDictionaryContext, type DslEntry, parseDsl, setupPlugin } from '../../src/index.js';
 import { type PlainTextPluginOptions, plainText } from '../../src/plugins/index.js';
-import { collect, entriesOf, HEADER } from '../plugin/helpers.js';
+import { collect, entriesOf, HEADER, thrown } from '../plugin/helpers.js';
 
 const DICT =
   'colo(u)r\n{[p]n[/p]} hue\n' +
@@ -49,6 +49,13 @@ describe('plain-text plugin', () => {
       subentries: false,
     });
     expect(first?.text).toBe('color ˈkʌlə color.wav\n 1) tint, shade\n 2) crossed tail');
+  });
+
+  it('passes the stress option on', async () => {
+    const entries = await entriesOf("w\n\tпров[']и[/']нция\n");
+    expect(run(entries)[0]?.text).toBe('провинция');
+    expect(run(entries, { stress: 'combining' })[0]?.text).toBe('прови\u0301нция');
+    expect(thrown(() => run(entries, { stress: 'x' as never }))).toMatchObject({ code: 'DSL5001' });
   });
 
   it('expands labels from the context abbreviations when asked', async () => {

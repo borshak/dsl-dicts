@@ -58,7 +58,12 @@ const entries = [
   ['dsl-dicts/node', 'describeRuntime', null],
   ['dsl-dicts/node', 'openDsl', null],
   ['dsl-dicts/node', 'findDictionaries', null],
-  ['dsl-dicts/article', 'MODULE', 'article'],
+  ['dsl-dicts/article', 'ARTICLE_VERSION', '1.0.0'],
+  ['dsl-dicts/article', 'article', null],
+  ['dsl-dicts/article', 'createArticlePlugin', null],
+  ['dsl-dicts/article', 'classifyBody', null],
+  ['dsl-dicts/article', 'DEFAULT_EXTRACTORS', null],
+  ['dsl-dicts/article', 'extractZoneMarked', null],
   ['dsl-dicts/plugins', 'plainText', null],
   ['dsl-dicts/plugins', 'searchText', null],
 ];
@@ -84,6 +89,26 @@ assert.deepEqual(results, [
   { headwords: ['color', 'colour'], text: 'hue' },
 ]);
 console.log('ok plugins', plainText.name + '@' + plainText.version, searchText.name + '@' + searchText.version);
+
+// The article plugin, through parseDsl, and a custom extractor.
+const { article, createArticlePlugin, extractZoneMarked } = await load('dsl-dicts/article');
+const articles = [];
+const dictText = text + 'cat\\n\\t[m1]1) [p]n[/p] [trn]кошка; кот[/trn]\\n\\t[m2][ex][lang id=1033]a cat[/lang] — кошка[/ex]\\n';
+for await (const out of parseDsl(dictText).entries({ plugin: article })) articles.push(out);
+assert.deepEqual(articles.map((a) => a.kind), ['zone-marked', 'zone-marked']);
+assert.deepEqual(articles[1].senses, [{
+  number: '1',
+  labels: [{ text: 'n' }],
+  translations: ['кошка', 'кот'],
+  examples: [{ source: { text: 'a cat', language: 'English' }, target: { text: 'кошка', language: 'English' } }],
+  comments: [],
+  references: [],
+  senses: [],
+}]);
+const custom = createArticlePlugin({ name: 'custom', extractors: { mine: extractZoneMarked }, classify: () => 'mine' });
+const [first] = await (async () => { const list = []; for await (const out of parseDsl(dictText).entries({ plugin: custom })) list.push(out); return list; })();
+assert.equal(first.kind, 'mine');
+console.log('ok article', article.name + '@' + article.version);
 
 // Companion parsers of the core, on text.
 const { parseAbbreviations, parseAnnotation, normalizeLabel } = await load('dsl-dicts');

@@ -328,7 +328,7 @@ export interface PluginDiagnosticDetails {
 
 /**
  * Creates a diagnostic for a plugin to report through `context.diagnostics`: code `DSL5101`,
- * the message prefixed with the plugin name.
+ * the message prefixed with the plugin name, and `source` set to the plugin name.
  *
  * @example
  * ```ts
@@ -348,6 +348,6 @@ export function createPluginDiagnostic(
   const position = details.position === undefined ? {} : { position: details.position };
   const diagnostic = createDiagnostic('pluginDiagnostic', `${name}: ${message}`, position);
   return details.severity === undefined
-    ? diagnostic
-    : { ...diagnostic, severity: details.severity };
+    ? { ...diagnostic, source: name }
+    : { ...diagnostic, severity: details.severity, source: name };
 }

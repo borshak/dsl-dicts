@@ -125,3 +125,29 @@ describe('lenient language names', () => {
     expect(resolveLanguageName(42 as never)).toBeUndefined();
   });
 });
+
+describe('language table against the table of dsl-dicts 1.x', () => {
+  // The ids of the 1.x language table (removed with the 1.x code): name, LCID, old id.
+  const LEGACY: readonly [string, number, number][] = [
+    ['English', 1033, 1],
+    ['Russian', 1049, 2],
+    ['German', 1031, 3],
+    ['French', 1036, 4],
+    ['Italian', 1040, 5],
+    ['SpanishModernSort', 3082, 6],
+    ['SpanishTraditionalSort', 1034, 7],
+    ['PortugueseStandard', 2070, 8],
+    ['Ukrainian', 1058, 24],
+    ['GermanNewSpelling', 32775, 26],
+    ['Latin', 1142, 30],
+  ];
+
+  it('contains every language of the 1.x table with matching ids', () => {
+    for (const [name, lcid, legacyId] of LEGACY) {
+      const language = findLanguageByName(name);
+      expect(language, name).toBeDefined();
+      expect(language?.lcid, name).toBe(lcid);
+      expect(language?.legacyId, name).toBe(legacyId);
+    }
+  });
+});

@@ -112,6 +112,18 @@ describe('toPlainText', () => {
     );
   });
 
+  it("renders [']: plain letters by default, with U+0301 after each letter with stress: 'combining'", () => {
+    const text = "пров[']и[/']нция, [b]a[']ei[/'][/b]";
+    expect(plain(text)).toBe('провинция, aei');
+    expect(plain(text, { stress: 'none' })).toBe('провинция, aei');
+    expect(plain(text, { stress: 'combining' })).toBe('прови\u0301нция, ae\u0301i\u0301');
+    expect(plain("[']~[/']", { tilde: 'o', stress: 'combining' })).toBe('o\u0301');
+    // Zones too; punctuation inside the tag gets no accent.
+    expect(zoneText(nodes("[trn]д[']о[/'][']-[/']м[/trn]"), ['trn'], { stress: 'combining' })).toBe(
+      'до\u0301-м',
+    );
+  });
+
   it('renders crossed tags as intended', () => {
     expect(plain('[trn][i]a[/trn] b[/i]')).toBe('a b');
     expect(plain('[b][i]x[/b]y[/i]')).toBe('xy');
@@ -125,6 +137,7 @@ describe('toPlainText', () => {
       () => toPlainText([], { headwords: {} as never }),
       () => toPlainText([], { indent: 2 as never }),
       () => toPlainText([], { abbreviations: {} as never }),
+      () => toPlainText([], { stress: 'acute' as never }),
       () => zoneText([], 'trn' as never),
     ]) {
       expect(thrown(call)).toMatchObject({ code: 'DSL0001' });

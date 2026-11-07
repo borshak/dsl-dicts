@@ -51,6 +51,13 @@ export interface PlainTextOptions {
    * Default `true`.
    */
   readonly subentries?: boolean;
+  /**
+   * How the stress marks of `[']` are rendered: `none` (the default) keeps the stressed
+   * letters as they are, without a mark; `combining` appends U+0301 COMBINING ACUTE ACCENT
+   * after each letter inside `[']...[/']` (the tag wraps the stressed vowel), so that
+   * `пров[']и[/']нция` becomes `прови\u0301нция`.
+   */
+  readonly stress?: 'none' | 'combining';
 }
 
 /**
@@ -92,6 +99,9 @@ interface Settings {
   readonly labels: boolean;
   readonly abbreviations: ReadonlyMap<string, string> | undefined;
   readonly subentries: boolean;
+  readonly stress: 'none' | 'combining';
+  /** Inside `[']` with `stress: 'combining'`: letters get the combining accent. */
+  readonly stressed: boolean;
 }
 
 /**
@@ -206,6 +216,10 @@ function settings(options: PlainTextOptions, unindexed: boolean, labels: boolean
   if (abbreviations !== undefined && typeof abbreviations?.get !== 'function') {
     throw DslError.of('invalidArgument', 'The abbreviations option must be a Map.');
   }
+  const { stress = 'none' } = options;
+  if (stress !== 'none' && stress !== 'combining') {
+    throw DslError.of('invalidArgument', 'The stress option must be "none" or "combining".');
+  }
   const first = headwords?.[0]?.variants?.[0];
   return {
     tilde: tilde ?? (typeof first === 'string' ? first : undefined),
@@ -216,6 +230,8 @@ function settings(options: PlainTextOptions, unindexed: boolean, labels: boolean
     labels: options.labels ?? labels,
     abbreviations,
     subentries: options.subentries ?? true,
+    stress,
+    stressed: false,
   };
 }
 
@@ -281,11 +297,13 @@ function render(nodes: readonly MarkupNode[], out: Writer, s: Settings): void {
   for (const node of nodes) {
     switch (node.type) {
       case 'text':
-        out.text(node.text);
+        out.text(s.stressed ? accent(node.text) : node.text);
         break;
-      case 'tilde':
-        out.text(tildeText(s.tilde, node.flipCase));
+      case 'tilde': {
+        const text = tildeText(s.tilde, node.flipCase);
+        out.text(s.stressed ? accent(text) : text);
         break;
+      }
       case 'lineBreak':
         out.newline();
         break;
@@ -321,6 +339,9 @@ function renderTag(node: TagNode, out: Writer, s: Settings): void {
     case '*':
       if (s.secondary) render(node.children, out, s);
       return;
+    case "'":
+      render(node.children, out, s.stress === 'combining' ? { ...s, stressed: true } : s);
+      return;
     case '!trs':
       if (s.unindexed) render(node.children, out, s);
       return;
@@ -338,6 +359,11 @@ function renderTag(node: TagNode, out: Writer, s: Settings): void {
     default:
       render(node.children, out, s);
   }
+}
+
+/** Appends U+0301 COMBINING ACUTE ACCENT to every letter. */
+function accent(text: string): string {
+  return text.replace(/\p{L}/gu, '$&\u0301');
 }
 
 /** The text of a label, for the abbreviation lookup. */
