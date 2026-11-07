@@ -127,6 +127,15 @@ describe('chunking invariance', () => {
   });
 });
 
+function isValidUtf8(bytes: Uint8Array): boolean {
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe('properties', () => {
   /** Unicode text rich in newlines and astral characters. Never contains lone surrogates. */
   const unicodeText = fc
@@ -185,7 +194,11 @@ describe('properties', () => {
     await fc.assert(
       fc.asyncProperty(header, cyrillic, splits, chunkSize, async (h, body, sizes, size) => {
         const text = h + body;
-        const result = await decodeAll(split(encode(text, 'windows-1251'), sizes), {
+        const bytes = encode(text, 'windows-1251');
+        // Short windows-1251 text can be valid UTF-8 as well (e.g. "Лё" = CB B8 = U+02F8);
+        // such input is genuinely ambiguous and detected as UTF-8 by design.
+        fc.pre(!isValidUtf8(bytes));
+        const result = await decodeAll(split(bytes, sizes), {
           chunkSize: size,
           defaultEncoding: h === '' ? 'windows-1251' : 'windows-1252',
         });
