@@ -4,23 +4,13 @@
  * @packageDocumentation
  */
 
-import {
-  createDiagnostic,
-  type Diagnostic,
-  type DiagnosticSink,
-  DslError,
-  type SourcePosition,
-} from '../diagnostics/index.js';
-import {
-  type BodyLine,
-  type LineSegment,
-  positionInLine,
-  type RawEntry,
-  type RawLine,
-} from '../segment/index.js';
-import type { MarkupNode } from './ast.js';
+import { type DiagnosticSink, DslError, type SourcePosition } from '../diagnostics/index.js';
+import { buildHeadword } from '../headword/parse.js';
+import { type BodyLine, type LineSegment, positionInLine, type RawLine } from '../segment/index.js';
+import type { Headword, MarkupNode } from './ast.js';
 import { TreeBuilder } from './builder.js';
-import { type Token, Tokenizer, type TokenReporter, token } from './tokenizer.js';
+import { type OrderedSink, orderedSink, reporter } from './report.js';
+import { type Token, Tokenizer, token } from './tokenizer.js';
 
 /**
  * Options of {@link parseMarkup} and {@link parseBody}.
@@ -101,6 +91,11 @@ export function parseMarkup(
  * A sub-entry that is not closed (`DSL2301`) ends at the next sub-entry or at the end of the
  * body.
  *
+ * Sub-entry headwords are parsed like `parseHeadword` does. A `~` in them stands for the
+ * first index form of the entry's first headword, taken from `entry.headwords` (raw lines
+ * from the segmenter, or headwords already parsed); without them it is kept as text
+ * (`DSL3102`).
+ *
  * Tokenizer rules are those of the internal `Tokenizer`; tree recovery rules those of the
  * internal `TreeBuilder` (both documented in the source and in the diagnostic catalog). In
  * short:
@@ -116,16 +111,28 @@ export function parseMarkup(
  *
  * @experimental
  */
-export function parseBody(
-  entry: Pick<RawEntry, 'body'>,
-  options: MarkupOptions = {},
-): MarkupNode[] {
+export function parseBody(entry: BodyInput, options: MarkupOptions = {}): MarkupNode[] {
   checkOptions(options);
   if (typeof entry !== 'object' || entry === null || !Array.isArray(entry.body)) {
     throw DslError.of('invalidArgument', 'The entry must have a body array.');
   }
+  const parents = entry.headwords;
+  if (parents !== undefined && !Array.isArray(parents)) {
+    throw DslError.of('invalidArgument', 'The headwords of the entry must be an array.');
+  }
   const lines = entry.body;
   const sink = orderedSink(options.diagnostics);
+  const positions = options.positions !== false;
+  // What `~` stands for: computed on the first sub-entry headword only.
+  let tilde: string | undefined;
+  let resolved = false;
+  const headword = (line: RawLine): Headword => {
+    if (!resolved) {
+      resolved = true;
+      tilde = tildeOf(parents);
+    }
+    return buildHeadword(line, { positions, diagnostics: sink, tilde });
+  };
   const tokens: Token[] = [];
   const tokenizer = new Tokenizer(tokens, reporter(lines, sink));
   let open = false;
@@ -166,26 +173,52 @@ export function parseBody(
         break;
     }
   }
-  return build(lines, tokens, options, sink);
+  return build(lines, tokens, options, sink, headword);
 }
 
 /**
- * Parses lines of markup. Internal; the headword parser uses it with `headword` set, which
- * makes `{ } ( )` tokens and `^` literal.
+ * The entry argument of {@link parseBody}: the body lines, and optionally the entry's
+ * headwords, raw or parsed, for `~` in sub-entry headwords.
+ *
+ * @experimental
  */
-export function parseLines(
-  lines: readonly RawLine[],
-  options: MarkupOptions,
-  headword = false,
-): MarkupNode[] {
+export interface BodyInput {
+  readonly body: readonly BodyLine[];
+  readonly headwords?: readonly (RawLine | Headword)[];
+}
+
+/** The first index form of the first headword, parsing it if it is a raw line. */
+function tildeOf(headwords: readonly (RawLine | Headword)[] | undefined): string | undefined {
+  const first = headwords?.[0];
+  if (typeof first !== 'object' || first === null) return undefined;
+  if ('variants' in first && Array.isArray(first.variants)) {
+    const value: unknown = first.variants[0];
+    return typeof value === 'string' ? value : undefined;
+  }
+  if (typeof first.text !== 'string') return undefined;
+  const parsed = buildHeadword(first as RawLine, {
+    positions: false,
+    diagnostics: undefined,
+    tilde: undefined,
+  });
+  return parsed.variants[0];
+}
+
+/** Parses lines of markup. Internal. */
+export function parseLines(lines: readonly RawLine[], options: MarkupOptions): MarkupNode[] {
   const sink = orderedSink(options.diagnostics);
   const tokens: Token[] = [];
-  const tokenizer = new Tokenizer(tokens, reporter(lines, sink), headword);
+  const tokenizer = new Tokenizer(tokens, reporter(lines, sink));
   for (let i = 0; i < lines.length; i++) {
     if (i > 0) tokens.push(token('newline', i, 0, 0));
     tokenizer.line((lines[i] as RawLine).text, i);
   }
-  return build(lines, tokens, options, sink);
+  return build(lines, tokens, options, sink, noHeadword);
+}
+
+/** `parseMarkup` does not recognize sub-entries, so it never parses their headwords. */
+function noHeadword(): Headword {
+  throw new TypeError('Unexpected sub-entry in markup.');
 }
 
 function build(
@@ -193,10 +226,12 @@ function build(
   tokens: readonly Token[],
   options: MarkupOptions,
   sink: OrderedSink | undefined,
+  headword: (line: RawLine) => Headword,
 ): MarkupNode[] {
   const nodes = new TreeBuilder(lines, tokens, {
     positions: options.positions !== false,
     diagnostics: sink,
+    headword,
   }).build();
   sink?.flush();
   return nodes;
@@ -265,34 +300,4 @@ function splitLines(text: string, origin: SourcePosition): RawLine[] {
     start = nl + 1;
     line++;
   }
-}
-
-interface OrderedSink extends DiagnosticSink {
-  flush(): void;
-}
-
-/**
- * Buffers diagnostics and forwards them in source order: the tokenizer runs over all lines
- * before the tree builder, and some problems are only known at the end (unclosed tags).
- */
-function orderedSink(target: DiagnosticSink | undefined): OrderedSink | undefined {
-  if (target === undefined) return undefined;
-  const buffer: Diagnostic[] = [];
-  return {
-    report(diagnostic) {
-      buffer.push(diagnostic);
-    },
-    flush() {
-      buffer.sort((a, b) => (a.position?.offset ?? 0) - (b.position?.offset ?? 0));
-      for (const diagnostic of buffer) target.report(diagnostic);
-    },
-  };
-}
-
-function reporter(lines: readonly RawLine[], sink: DiagnosticSink | undefined): TokenReporter {
-  if (sink === undefined) return () => {};
-  return (name, message, line, at) => {
-    const position = positionInLine(lines[line] as RawLine, at);
-    sink.report(createDiagnostic(name, message, { position }));
-  };
 }

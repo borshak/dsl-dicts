@@ -134,7 +134,8 @@ function charLength(text: string, i: number, to: number): number {
  *   only knows `^~` and shows any other `^`). Before anything else (a tag, a link, a space, a
  *   digit, punctuation, another `^`, the end of the line) the flip would do nothing, so the
  *   `^` is literal (`DSL4004`): real dictionaries contain such literal carets.
- * - In headword mode, `{ } ( )` are `punct` tokens and `^` is literal.
+ * - In headword mode, `{ } ( )` are `punct` tokens and `^` is literal, except in `^~`
+ *   (GoldenDict expands `^~` in headwords; Lingvo knows no other `^` there).
  *
  * The tokenizer keeps the `[s]`/`[video]` nesting count across lines, so use one instance
  * per text.
@@ -186,8 +187,16 @@ export class Tokenizer {
               break;
             case CARET:
               if (this.headword) {
-                this.literal(i);
-                i++;
+                // Only `^~` is special in a headword; any other `^` is literal.
+                if (i + 1 < to && text.charCodeAt(i + 1) === TILDE) {
+                  this.emitText(i);
+                  this.out.push(token('tilde', this.lineIndex, i, i + 2, '', '', true));
+                  this.mark = i + 2;
+                  i += 2;
+                } else {
+                  this.literal(i);
+                  i++;
+                }
               } else {
                 caretAt = i;
                 state = S_CARET;

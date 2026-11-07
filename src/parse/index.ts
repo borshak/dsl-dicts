@@ -1,0 +1,13 @@
+/**
+ * The full pipeline: `parseDsl`.
+ *
+ * @packageDocumentation
+ */
+
+export {
+  type BodyMode,
+  type DslEntry,
+  type ParseDslOptions,
+  type ParsedDsl,
+  parseDsl,
+} from './parse.js';

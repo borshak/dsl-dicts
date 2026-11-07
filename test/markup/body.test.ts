@@ -54,8 +54,31 @@ describe('sub-entries', () => {
     const { nodes } = parseEntry(entry('\t@ one\n  @   two  \n\tbody\n\t@\n'));
     const sub = nodes[0] as SubentryNode;
     expect(sub.headwords).toEqual([
-      { text: 'one', position: { offset: 76, line: 5, column: 4 } },
-      { text: 'two', position: { offset: 86, line: 6, column: 7 } },
+      {
+        raw: 'one',
+        display: [{ type: 'text', text: 'one' }],
+        text: 'one',
+        variants: ['one'],
+      },
+      {
+        raw: 'two',
+        display: [{ type: 'text', text: 'two' }],
+        text: 'two',
+        variants: ['two'],
+      },
+    ]);
+    const withPositions = parseBody(
+      entry('\t@ one\n  @   two  \n\tbody\n\t@\n'),
+    )[0] as SubentryNode;
+    expect(withPositions.headwords.map((h) => [h.position, h.end])).toEqual([
+      [
+        { offset: 76, line: 5, column: 4 },
+        { offset: 79, line: 5, column: 7 },
+      ],
+      [
+        { offset: 86, line: 6, column: 7 },
+        { offset: 89, line: 6, column: 10 },
+      ],
     ]);
     expect(show(nodes)).toBe('@{one|two}("body")');
   });
@@ -105,13 +128,19 @@ describe('sub-entries', () => {
     });
   });
 
-  it('keep segments of a headword line with a comment', () => {
-    const { nodes } = parseEntry(entry('\t@ a{{c}}b\n\tx\n\t@\n'));
+  it('map headword positions across a removed comment', () => {
+    const nodes = parseBody(entry('\t@ a{{c}}b\n\tx\n\t@\n'));
     const sub = nodes[0] as SubentryNode;
-    expect(sub.headwords[0]?.text).toBe('ab');
-    expect(sub.headwords[0]?.segments).toEqual([
-      { index: 0, position: { offset: 76, line: 5, column: 4 } },
-      { index: 1, position: { offset: 82, line: 5, column: 10 } },
+    expect(sub.headwords[0]?.raw).toBe('ab');
+    expect(sub.headwords[0]?.position).toEqual({ offset: 76, line: 5, column: 4 });
+    expect(sub.headwords[0]?.end).toEqual({ offset: 83, line: 5, column: 11 });
+    expect(sub.headwords[0]?.display).toEqual([
+      {
+        type: 'text',
+        text: 'ab',
+        position: { offset: 76, line: 5, column: 4 },
+        end: { offset: 83, line: 5, column: 11 },
+      },
     ]);
   });
 

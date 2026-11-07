@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { findLanguageByName } from '../../src/index.js';
 import { HEADER, segment, segmentAsync } from './helpers.js';
 
 describe('header', () => {
@@ -28,6 +29,8 @@ describe('header', () => {
       name: 'Test',
       indexLanguage: 'English',
       contentsLanguage: 'Russian',
+      indexLanguageInfo: findLanguageByName('English'),
+      contentsLanguageInfo: findLanguageByName('Russian'),
     });
     expect(codes).toEqual([]);
   });
@@ -92,22 +95,29 @@ describe('header', () => {
     expect(codes).toEqual(['DSL2003']);
   });
 
-  it('reports unknown languages (names are case-sensitive)', () => {
+  it('reports unknown languages, and inexact names as info', () => {
     const { header, diagnostics } = segment(
       '#NAME "x"\n#INDEX_LANGUAGE "Klingon"\n#CONTENTS_LANGUAGE "russian"\n',
     );
     expect(header).toMatchObject({ indexLanguage: 'Klingon', contentsLanguage: 'russian' });
-    expect(diagnostics.map((d) => [d.code, d.position?.line])).toEqual([
-      ['DSL2005', 2],
-      ['DSL2005', 3],
+    expect(header?.indexLanguageInfo).toBeUndefined();
+    expect(header?.contentsLanguageInfo?.name).toBe('Russian');
+    expect(diagnostics.map((d) => [d.code, d.severity, d.position?.line])).toEqual([
+      ['DSL2005', 'warning', 2],
+      ['DSL2007', 'info', 3],
     ]);
-    expect(diagnostics[0]?.message).not.toContain('GoldenDict');
-    expect(diagnostics[1]?.message).toContain('GoldenDict reads it as Russian');
+    expect(diagnostics[1]?.message).toContain('read as Russian');
   });
 
-  it('hints at the language GoldenDict would accept', () => {
-    const { diagnostics } = segment('#INDEX_LANGUAGE "Spanish"\n');
-    expect(diagnostics.find((d) => d.code === 'DSL2005')?.message).toContain('SpanishModernSort');
+  it('resolves names without their ending, as GoldenDict does', () => {
+    const { header, diagnostics } = segment(
+      '#NAME "x"\n#INDEX_LANGUAGE "Spanish"\n#CONTENTS_LANGUAGE "GermanNewSpelling"\n',
+    );
+    expect(header?.indexLanguage).toBe('Spanish');
+    expect(header?.indexLanguageInfo?.name).toBe('SpanishModernSort');
+    expect(header?.contentsLanguageInfo?.name).toBe('GermanNewSpelling');
+    expect(diagnostics.map((d) => d.code)).toEqual(['DSL2007']);
+    expect(diagnostics[0]?.message).toContain('SpanishModernSort');
   });
 
   it('removes comments from directive lines and drops comment-only lines', () => {

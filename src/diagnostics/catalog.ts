@@ -147,12 +147,21 @@ export const DIAGNOSTICS = {
   unknownLanguage: {
     code: 'DSL2005',
     severity: 'warning',
-    summary: 'A language directive names a language unknown to Lingvo (names are case-sensitive).',
+    summary:
+      'A language directive names a language unknown to Lingvo, even read leniently as ' +
+      'GoldenDict does (see DSL2007).',
   },
   misplacedDirective: {
     code: 'DSL2006',
     severity: 'warning',
     summary: 'A line starting with # after the header is ignored; escape it as \\# for a headword.',
+  },
+  inexactLanguage: {
+    code: 'DSL2007',
+    severity: 'info',
+    summary:
+      'A language directive names a Lingvo language inexactly (case, or without an ending ' +
+      'such as ModernSort); it is resolved as GoldenDict does.',
   },
   unclosedComment: {
     code: 'DSL2101',
@@ -189,6 +198,60 @@ export const DIAGNOSTICS = {
     code: 'DSL2302',
     severity: 'warning',
     summary: 'A lone @ closes no open sub-entry.',
+  },
+
+  unclosedBrace: {
+    code: 'DSL3001',
+    severity: 'warning',
+    summary: 'A { in a headword is not closed: the rest of the headword is unsortable.',
+  },
+  strayBrace: {
+    code: 'DSL3002',
+    severity: 'warning',
+    summary: 'A } in a headword closes no {; it is ignored.',
+  },
+  unclosedParenthesis: {
+    code: 'DSL3003',
+    severity: 'warning',
+    summary: 'A ( in a headword is not closed: the optional part runs to the end of the headword.',
+  },
+  strayParenthesis: {
+    code: 'DSL3004',
+    severity: 'warning',
+    summary:
+      'A ) in a headword closes no (; it is shown but ignored in the index forms. Escape it ' +
+      'as \\) for a literal parenthesis.',
+  },
+  markupOutsideBraces: {
+    code: 'DSL3101',
+    severity: 'warning',
+    summary:
+      'A headword has a tag or link outside the unsortable part {...}, where Lingvo forbids ' +
+      'them; it is parsed, and its text is part of the index forms. Reported once per headword.',
+  },
+  unresolvedTilde: {
+    code: 'DSL3102',
+    severity: 'warning',
+    summary:
+      'A ~ in a headword has no headword to stand for (it is in the first headword of an ' +
+      "entry, or the parent's headwords are not known); it is kept as text in the index forms.",
+  },
+  emptyHeadword: {
+    code: 'DSL3201',
+    severity: 'warning',
+    summary: 'A headword has no sortable text, so no index form: it is all unsortable or empty.',
+  },
+  headwordTooLong: {
+    code: 'DSL3202',
+    severity: 'warning',
+    summary:
+      'The sortable text of a headword is longer than 500 characters: its optional parts are ' +
+      'not expanded (as in GoldenDict) and the parentheses are kept.',
+  },
+  tooManyVariants: {
+    code: 'DSL3203',
+    severity: 'warning',
+    summary: 'A headword expands to more than 256 index forms; only the first 256 are kept.',
   },
 
   unterminatedTag: {

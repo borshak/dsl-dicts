@@ -16,7 +16,6 @@
  */
 
 import type { SourcePosition } from '../diagnostics/index.js';
-import type { RawLine } from '../segment/index.js';
 
 /**
  * Version of the AST schema. It changes only when a change could break a consumer: a node
@@ -128,7 +127,8 @@ export interface LinkNode extends NodeLocation {
 
 /**
  * `~`: the entry's headword. `^~` is the headword with the case of its first character
- * flipped (`flipCase`). The parser does not substitute it; projections do.
+ * flipped (`flipCase`). The markup parser does not substitute it; projections do. (In a
+ * headword's `text` and `variants` it is substituted; see {@link Headword}.)
  *
  * @experimental
  */
@@ -145,9 +145,67 @@ export interface TildeNode extends NodeLocation {
  */
 export interface SubentryNode extends NodeLocation {
   readonly type: 'subentry';
-  /** The headword lines, unparsed: the text after the `@`, trimmed, with its positions. */
-  readonly headwords: readonly RawLine[];
+  /**
+   * The headwords, one per `@ headword` line, at least one. A `~` in them stands for the
+   * parent entry's headword: it stays a `tilde` node in `display` and is substituted in `text`
+   * and `variants` (see {@link Headword}).
+   */
+  readonly headwords: readonly Headword[];
   readonly children: readonly MarkupNode[];
+}
+
+/**
+ * A parsed headword: of an entry, or of a sub-entry.
+ *
+ * Headword syntax (DSL manual, with GoldenDict's behavior where the manual is silent):
+ * - `(...)` is an optional part: the headword has a form with it and one without it.
+ *   `colo(u)r(s)` has four forms. Groups may follow each other and nest.
+ * - `{...}` is the unsortable part: shown in the card, but not part of any index form. Tags
+ *   are only allowed there (`{[']}a{[/']}` stresses the sortable `a`); a tag outside braces is
+ *   parsed all the same, with a diagnostic.
+ * - `\x` makes any character literal, `\(`, `\{` and `\~` included.
+ * - `~` and `^~` stand for another headword (see `text`); `^` is literal otherwise.
+ *
+ * Plain data, like every AST node.
+ *
+ * @experimental
+ */
+export interface Headword extends NodeLocation {
+  /**
+   * The headword as written: comments removed, without leading and trailing spaces and tabs
+   * (an escaped trailing space is kept). `position` and `end` delimit it.
+   */
+  readonly raw: string;
+  /**
+   * The headword as shown in the card title: markup nodes with the braces removed but their
+   * content kept, parentheses kept as text, escapes resolved and tags parsed by the rules of
+   * `parseMarkup`. `~` stays a `tilde` node.
+   */
+  readonly display: readonly MarkupNode[];
+  /**
+   * The plain text of `display`: text without tags, `~` substituted, a `[br]` as a space;
+   * runs of spaces and tabs collapsed to one space, and trimmed. Parentheses and the
+   * unsortable part are included.
+   */
+  readonly text: string;
+  /**
+   * The index forms: what the headword is listed, sorted and searched under. Every
+   * combination of the optional parts, in a deterministic order (each part left out before
+   * it is included, the leftmost part varying slowest: `color`, `colors`, `colour`,
+   * `colours`). Without the unsortable part and tags, with escapes resolved and `~`
+   * substituted, spaces and tabs collapsed and trimmed; empty forms and duplicates are
+   * removed. Empty when the headword has no sortable text (`DSL3201`).
+   *
+   * Limits: a headword whose sortable text is longer than 500 characters is not expanded
+   * (its only form keeps the parentheses as text, `DSL3202`), and at most 256 combinations
+   * are generated (`DSL3203`).
+   *
+   * `~` stands for the first index form of the entry's first headword: in a sub-entry's
+   * headwords, and in an entry's headwords after the first (as GoldenDict does). `^~` is the
+   * same with the case of its first character flipped. A `~` with nothing to stand for (in
+   * an entry's first headword) is kept as `~` (`DSL3102`).
+   */
+  readonly variants: readonly string[];
 }
 
 /**

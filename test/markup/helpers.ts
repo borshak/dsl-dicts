@@ -124,7 +124,7 @@ export function serializeBody(nodes: readonly MarkupNode[]): string {
         case 'subentry':
           newLine();
           for (const headword of node.headwords) {
-            write(`@ ${headword.text}`);
+            write(`@ ${headword.raw}`);
             lines.push('');
           }
           visit(node.children);

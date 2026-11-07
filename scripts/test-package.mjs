@@ -46,6 +46,7 @@ function node(args, cwd) {
 // Expectations per entry point: [specifier, export name, expected value or null (existence only)].
 const entries = [
   ['dsl-dicts', 'VERSION', version],
+  ['dsl-dicts', 'parseDsl', null],
   ['dsl-dicts/node', 'describeRuntime', null],
   ['dsl-dicts/article', 'MODULE', 'article'],
   ['dsl-dicts/plugins', 'MODULE', 'plugins'],

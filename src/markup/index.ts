@@ -7,6 +7,7 @@
 export {
   AST_VERSION,
   type DeepReadonly,
+  type Headword,
   isParentNode,
   type LineBreakNode,
   type LinkNode,
@@ -19,5 +20,11 @@ export {
   type TextNode,
   type TildeNode,
 } from './ast.js';
-export { type MarkupOptions, type ParseMarkupOptions, parseBody, parseMarkup } from './parse.js';
+export {
+  type BodyInput,
+  type MarkupOptions,
+  type ParseMarkupOptions,
+  parseBody,
+  parseMarkup,
+} from './parse.js';
 export { type Visitor, type WalkResult, walk } from './walk.js';

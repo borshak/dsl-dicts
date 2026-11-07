@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { findLanguageByName, LANGUAGES } from '../data/languages.js';
+import { resolveLanguageName } from '../data/languages.js';
 import { createDiagnostic, type Diagnostic, type SourcePosition } from '../diagnostics/index.js';
 import type { Directive, DslHeader } from './types.js';
 
@@ -23,9 +23,9 @@ const KNOWN = new Set([
 ]);
 
 const MANDATORY = [
-  ['NAME', 'name'],
-  ['INDEX_LANGUAGE', 'indexLanguage'],
-  ['CONTENTS_LANGUAGE', 'contentsLanguage'],
+  ['NAME', 'name', undefined],
+  ['INDEX_LANGUAGE', 'indexLanguage', 'indexLanguageInfo'],
+  ['CONTENTS_LANGUAGE', 'contentsLanguage', 'contentsLanguageInfo'],
 ] as const;
 
 type Report = (diagnostic: Diagnostic) => void;
@@ -105,20 +105,32 @@ export class HeaderBuilder {
     const header: { -readonly [K in keyof DslHeader]: DslHeader[K] } = {
       directives: this.directives,
     };
-    for (const [name, field] of MANDATORY) {
+    for (const [name, field, infoField] of MANDATORY) {
       const directive = this.directives.find((d) => d.name.toUpperCase() === name);
       if (directive === undefined) {
         this.report(createDiagnostic('missingDirective', `The header has no #${name} directive.`));
         continue;
       }
       header[field] = directive.value;
-      if (field !== 'name' && findLanguageByName(directive.value) === undefined) {
-        const lenient = findLanguageLeniently(directive.value);
-        const hint = lenient === undefined ? '' : ` (GoldenDict reads it as ${lenient})`;
+      if (infoField === undefined) continue;
+      const match = resolveLanguageName(directive.value);
+      if (match === undefined) {
         this.report(
           createDiagnostic(
             'unknownLanguage',
-            `#${directive.name} names an unknown language: "${directive.value}"${hint}.`,
+            `#${directive.name} names an unknown language: "${directive.value}".`,
+            { position: directive.position },
+          ),
+        );
+        continue;
+      }
+      header[infoField] = match.language;
+      if (!match.exact) {
+        this.report(
+          createDiagnostic(
+            'inexactLanguage',
+            `#${directive.name} "${directive.value}" is not an exact Lingvo name; it is read ` +
+              `as ${match.language.name}, as GoldenDict does.`,
             { position: directive.position },
           ),
         );
@@ -126,18 +138,6 @@ export class HeaderBuilder {
     }
     return header;
   }
-}
-
-const LENIENT_SUFFIX = /(?:newspelling|standard|modernsort|traditionalsort|prc)$/;
-
-/**
- * Finds a language the way GoldenDict does: case-insensitively and ignoring the endings
- * `NewSpelling`, `Standard`, `ModernSort`, `TraditionalSort` and `PRC`. Only used for hints.
- */
-function findLanguageLeniently(value: string): string | undefined {
-  const key = value.toLowerCase().replace(LENIENT_SUFFIX, '');
-  if (key.length === 0) return undefined;
-  return LANGUAGES.find((l) => l.name.toLowerCase().replace(LENIENT_SUFFIX, '') === key)?.name;
 }
 
 /**

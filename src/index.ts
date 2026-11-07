@@ -10,6 +10,14 @@
 export const VERSION = '2.0.0-beta.0';
 
 export {
+  findLanguageById,
+  findLanguageByName,
+  type LanguageInfo,
+  type LanguageMatch,
+  type LanguageSupport,
+  resolveLanguageName,
+} from './data/languages.js';
+export {
   type DecodedText,
   type DecodeInfo,
   type DecodeOptions,
@@ -36,7 +44,17 @@ export {
   type SourcePosition,
 } from './diagnostics/index.js';
 export {
+  type Headword,
+  type HeadwordOptions,
+  MAX_EXPANDED_LENGTH,
+  MAX_VARIANTS,
+  type ParseHeadwordOptions,
+  parseHeadword,
+  parseHeadwords,
+} from './headword/index.js';
+export {
   AST_VERSION,
+  type BodyInput,
   type DeepReadonly,
   isParentNode,
   type LineBreakNode,
@@ -57,6 +75,13 @@ export {
   type WalkResult,
   walk,
 } from './markup/index.js';
+export {
+  type BodyMode,
+  type DslEntry,
+  type ParseDslOptions,
+  type ParsedDsl,
+  parseDsl,
+} from './parse/index.js';
 export {
   type BodyLine,
   type BodyLineKind,

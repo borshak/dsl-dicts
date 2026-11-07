@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { findLanguageById, findLanguageByName, LANGUAGES } from '../../src/data/index.js';
+import {
+  findLanguageById,
+  findLanguageByName,
+  LANGUAGES,
+  resolveLanguageName,
+} from '../../src/data/index.js';
 
 describe('language table integrity', () => {
   it('has unique names', () => {
@@ -80,5 +85,43 @@ describe('language lookups', () => {
     expect(findLanguageById(-1)).toBeUndefined();
     expect(findLanguageById(1.5)).toBeUndefined();
     expect(findLanguageById(Number.NaN)).toBeUndefined();
+  });
+});
+
+describe('lenient language names', () => {
+  const resolve = (name: string) => {
+    const match = resolveLanguageName(name);
+    return match === undefined ? undefined : [match.language.name, match.exact];
+  };
+
+  it('matches exact names exactly', () => {
+    for (const l of LANGUAGES)
+      expect(resolveLanguageName(l.name)).toEqual({ language: l, exact: true });
+  });
+
+  it('ignores case and surrounding whitespace', () => {
+    expect(resolve('english')).toEqual(['English', false]);
+    expect(resolve(' RUSSIAN ')).toEqual(['Russian', false]);
+    expect(resolve('chineseprc')).toEqual(['ChinesePRC', false]);
+    expect(resolve('germannewspelling')).toEqual(['GermanNewSpelling', false]);
+  });
+
+  it('ignores the endings GoldenDict removes, on either side', () => {
+    expect(resolve('Spanish')).toEqual(['SpanishModernSort', false]);
+    expect(resolve('spanishtraditionalsort')).toEqual(['SpanishTraditionalSort', false]);
+    expect(resolve('Portuguese')).toEqual(['PortugueseStandard', false]);
+    expect(resolve('RussianStandard')).toEqual(['Russian', false]);
+    expect(resolve('GermanStandard')).toEqual(['German', false]);
+    expect(resolve('EnglishPRC')).toEqual(['English', false]);
+  });
+
+  it('rejects names that match nothing', () => {
+    expect(resolve('Klingon')).toBeUndefined();
+    expect(resolve('')).toBeUndefined();
+    expect(resolve('  ')).toBeUndefined();
+    expect(resolve('PRC')).toBeUndefined();
+    expect(resolve('Standard')).toBeUndefined();
+    expect(resolve('toString')).toBeUndefined();
+    expect(resolveLanguageName(42 as never)).toBeUndefined();
   });
 });

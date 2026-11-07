@@ -22,7 +22,9 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'browser',
-          include: ['test/{core,data,decode,diagnostics,markup,segment}/**/*.test.ts'],
+          include: [
+            'test/{core,data,decode,diagnostics,headword,markup,parse,segment}/**/*.test.ts',
+          ],
           browser: {
             enabled: true,
             headless: true,

@@ -7,6 +7,7 @@
  * @packageDocumentation
  */
 
+import type { LanguageInfo } from '../data/languages.js';
 import type { SourcePosition } from '../diagnostics/index.js';
 
 /**
@@ -42,6 +43,13 @@ export interface DslHeader {
   readonly indexLanguage?: string;
   /** Value of the first `#CONTENTS_LANGUAGE` (the language of the bodies), if any. */
   readonly contentsLanguage?: string;
+  /**
+   * The language `indexLanguage` names, if it names one. Resolved leniently, as GoldenDict
+   * does (`DSL2007` if the name is not exact; see `resolveLanguageName`).
+   */
+  readonly indexLanguageInfo?: LanguageInfo;
+  /** The language `contentsLanguage` names, if it names one, resolved like `indexLanguageInfo`. */
+  readonly contentsLanguageInfo?: LanguageInfo;
 }
 
 /**

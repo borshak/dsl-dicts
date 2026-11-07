@@ -497,3 +497,67 @@ export function findLanguageByName(name: string): LanguageInfo | undefined {
 export function findLanguageById(id: number): LanguageInfo | undefined {
   return BY_ID.get(id);
 }
+
+/**
+ * Result of {@link resolveLanguageName}.
+ */
+export interface LanguageMatch {
+  readonly language: LanguageInfo;
+  /** The name is the exact Lingvo name; `false` if it was resolved leniently. */
+  readonly exact: boolean;
+}
+
+/** Endings GoldenDict removes from language names before looking them up. */
+const LENIENT_ENDINGS = ['newspelling', 'standard', 'modernsort', 'traditionalsort', 'prc'];
+
+/** Lowercases a name and removes one GoldenDict ending, if something is left before it. */
+function lenientKey(name: string): string {
+  const key = name.toLowerCase();
+  for (const ending of LENIENT_ENDINGS) {
+    if (key.length > ending.length && key.endsWith(ending)) {
+      return key.slice(0, -ending.length);
+    }
+  }
+  return key;
+}
+
+const BY_LOWER_NAME: ReadonlyMap<string, LanguageInfo> = new Map(
+  LANGUAGES.map((l) => [l.name.toLowerCase(), l]),
+);
+
+/** First language (in table order) for each lenient key. */
+const BY_LENIENT_KEY: ReadonlyMap<string, LanguageInfo> = (() => {
+  const map = new Map<string, LanguageInfo>();
+  for (const l of LANGUAGES) {
+    const key = lenientKey(l.name);
+    if (!map.has(key)) map.set(key, l);
+  }
+  return map;
+})();
+
+/**
+ * Finds a language by name, leniently, the way GoldenDict reads `#INDEX_LANGUAGE` and
+ * `#CONTENTS_LANGUAGE`. In order of precedence:
+ * 1. the exact, case-sensitive Lingvo name (`exact: true`);
+ * 2. the name in any case, without surrounding whitespace: `english` is `English`;
+ * 3. the name in any case, without one of the endings `NewSpelling`, `Standard`,
+ *    `ModernSort`, `TraditionalSort` and `PRC` on either side: `Spanish` is
+ *    `SpanishModernSort`, `Portuguese` is `PortugueseStandard`, `RussianStandard` is
+ *    `Russian`. When several languages share the stem, the first one in table order wins
+ *    (`German` before `GermanNewSpelling`, `SpanishModernSort` before
+ *    `SpanishTraditionalSort`).
+ *
+ * Lingvo itself only accepts exact names; use {@link findLanguageByName} for that.
+ *
+ * @returns The language and whether the match was exact, or `undefined` if nothing matches.
+ */
+export function resolveLanguageName(name: string): LanguageMatch | undefined {
+  const exact = BY_NAME.get(name);
+  if (exact !== undefined) return { language: exact, exact: true };
+  if (typeof name !== 'string') return undefined;
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return undefined;
+  const language =
+    BY_LOWER_NAME.get(trimmed.toLowerCase()) ?? BY_LENIENT_KEY.get(lenientKey(trimmed));
+  return language === undefined ? undefined : { language, exact: false };
+}

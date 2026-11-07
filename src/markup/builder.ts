@@ -16,6 +16,7 @@ import {
 } from '../diagnostics/index.js';
 import { positionInLine, type RawLine } from '../segment/index.js';
 import type {
+  Headword,
   LineBreakNode,
   LinkNode,
   MarkupNode,
@@ -58,6 +59,8 @@ interface Frame {
 export interface BuildOptions {
   readonly positions: boolean;
   readonly diagnostics: DiagnosticSink | undefined;
+  /** Parses the headword line of a sub-entry. */
+  readonly headword: (line: RawLine) => Headword;
 }
 
 /**
@@ -161,8 +164,8 @@ export class TreeBuilder {
         case 'subentryHeadword': {
           const frame = this.stack[this.base] as Frame;
           if (frame.node !== this.root) {
-            ((frame.node as unknown as SubentryNode).headwords as RawLine[]).push(
-              t.headword as RawLine,
+            ((frame.node as unknown as SubentryNode).headwords as Headword[]).push(
+              this.options.headword(t.headword as RawLine),
             );
           }
           break;
@@ -595,14 +598,10 @@ export class TreeBuilder {
     }
     if (plain !== -1) while (this.stack.length > plain) this.closeUnclosed(at);
     this.pendingBreak = false;
+    const headwords = [this.options.headword(t.headword as RawLine)];
     const node: Writable<SubentryNode> & Parent = this.options.positions
-      ? {
-          type: 'subentry',
-          headwords: [t.headword as RawLine],
-          children: [],
-          position: this.startOf(t),
-        }
-      : { type: 'subentry', headwords: [t.headword as RawLine], children: [] };
+      ? { type: 'subentry', headwords, children: [], position: this.startOf(t) }
+      : { type: 'subentry', headwords, children: [] };
     this.append(node as SubentryNode);
     this.stack.push(this.frame(F_CONTAINER, node, '', undefined, false, false, t.line, t.start));
     this.base = this.stack.length - 1;
