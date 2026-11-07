@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "rootDir": ".",
+    "paths": {
+      "dsl-dicts": ["./src/index.ts"],
+      "dsl-dicts/*": ["./src/*/index.ts"]
+    }
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}

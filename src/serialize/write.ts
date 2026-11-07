@@ -1,0 +1,227 @@
+/**
+ * `toJsonl` and `toJson`: streaming serialization of a parsed dictionary.
+ *
+ * @packageDocumentation
+ */
+
+import { type Diagnostic, type DiagnosticCounts, dslError } from '../diagnostics/index.js';
+import type { DslEntry, ParsedDsl } from '../parse/parse.js';
+import { type DslPlugin, definePlugin, type PluginUse } from '../plugin/plugin.js';
+import { createJsonlHeader, type JsonlSummaryRecord } from './format.js';
+
+/**
+ * Options of {@link toJsonl} and {@link toJson}, besides the plugin: an export of the AST
+ * entries takes these only, an export of a plugin's output these and a `PluginUse`
+ * (`plugin`, and its `options`, required when the plugin requires them).
+ */
+export interface ToJsonlOptions {
+  /**
+   * End the document with a summary record: the entry count and the diagnostics by code,
+   * all of them, of every layer and of the plugin (`ParsedDsl.diagnosticCounts()` at the end
+   * of the export). Default `false`.
+   */
+  readonly summary?: boolean;
+}
+
+/** Options of {@link toJson}: those of {@link toJsonl}, and `pretty`. */
+export interface ToJsonOptions extends ToJsonlOptions {
+  /** Indent the document by two spaces. Default `false`. */
+  readonly pretty?: boolean;
+}
+
+/** The options of an export without a plugin. */
+type NoPlugin = { readonly plugin?: undefined; readonly options?: undefined };
+
+/** The parts of an export in order, each already rendered as JSON text. */
+interface Piece {
+  readonly kind: 'header' | 'entry' | 'summary';
+  readonly text: string;
+}
+
+/** Renders a value as JSON text, nested `depth` levels deep; `undefined` if it is no JSON. */
+type Render = (value: unknown, depth: number) => string | undefined;
+
+const compact: Render = (value) => JSON.stringify(value);
+
+/**
+ * Serializes a dictionary as JSONL: lines, each a JSON record ending with `\n`, produced as
+ * the entries are read, so that a dictionary of any size is exported in constant memory. The
+ * first line is the header record, then one `entry` record per entry, then the optional
+ * `summary`; see {@link JSONL_FORMAT}. Records are compact (one line each); a document in
+ * which they span several lines is JSON, not JSONL: see {@link toJson}.
+ *
+ * Without a plugin the payload of an entry record is the AST entry (`DslEntry`, with
+ * positions as the dictionary was parsed with them). With a plugin it is what the plugin
+ * returns, which has to be JSON-serializable: an output that is not, such as `undefined`,
+ * fails the export (`DSL7006`). A dictionary in raw mode cannot be exported (`DSL0001`).
+ *
+ * Reading starts when the first line is requested. The header needs the encoding to be known,
+ * and for an ASCII-only file that is only at the end of the input, which is then read
+ * before the first line. Errors of reading, of strict mode and of plugins end the iteration
+ * as `DslError`s, after the records already produced.
+ *
+ * @example
+ * ```ts
+ * const dict = parseDsl(bytes);
+ * for await (const line of toJsonl(dict, { plugin: article })) process.stdout.write(line);
+ * ```
+ *
+ * @throws DslError synchronously for invalid arguments (`DSL0001`: a dictionary in raw mode,
+ * an invalid plugin or option); `DSL0002` when iterating a dictionary whose entries were read
+ * already; `DSL7006` if an entry cannot be serialized.
+ */
+export function toJsonl(
+  dict: ParsedDsl,
+  options?: ToJsonlOptions & NoPlugin,
+): AsyncIterable<string>;
+export function toJsonl<TOut, TOptions>(
+  dict: ParsedDsl,
+  options: ToJsonlOptions & PluginUse<TOut, TOptions>,
+): AsyncIterable<string>;
+export function toJsonl(dict: ParsedDsl, options: AnyOptions = {}): AsyncIterable<string> {
+  const pieces = produce(dict, options, compact);
+  return {
+    async *[Symbol.asyncIterator]() {
+      for await (const { kind, text } of pieces) {
+        yield kind === 'entry' ? `{"type":"entry","data":${text}}\n` : `${text}\n`;
+      }
+    },
+  };
+}
+
+/**
+ * Serializes a dictionary as one JSON document, `{ "header": …, "entries": […], "summary": … }`,
+ * streamed as chunks of text that concatenate to the document (and end with a newline). Like
+ * `toJsonl` it does not hold the dictionary in memory; the document itself, though, can only
+ * be read as a whole, so JSONL is the format for large dictionaries.
+ *
+ * `header` and `summary` are the records of JSONL (with their `type`); `entries` lists the
+ * payloads of the entry records. `summary` is there if requested. The other options and the
+ * errors are those of {@link toJsonl}.
+ */
+export function toJson(dict: ParsedDsl, options?: ToJsonOptions & NoPlugin): AsyncIterable<string>;
+export function toJson<TOut, TOptions>(
+  dict: ParsedDsl,
+  options: ToJsonOptions & PluginUse<TOut, TOptions>,
+): AsyncIterable<string>;
+export function toJson(
+  dict: ParsedDsl,
+  options: AnyOptions & ToJsonOptions = {},
+): AsyncIterable<string> {
+  const { pretty = false } = options;
+  if (typeof pretty !== 'boolean') {
+    throw dslError('invalidArgument', 'The pretty option must be a boolean.');
+  }
+  const render: Render = (value, depth) => {
+    const text = JSON.stringify(value, null, pretty ? 2 : undefined);
+    return pretty ? text?.replaceAll('\n', `\n${'  '.repeat(depth)}`) : text;
+  };
+  const pieces = produce(dict, options, render);
+  return {
+    async *[Symbol.asyncIterator]() {
+      let entries = 0;
+      let closed = false;
+      const close = (): string => {
+        closed = true;
+        return entries === 0 ? ']' : pretty ? '\n  ]' : ']';
+      };
+      for await (const { kind, text } of pieces) {
+        if (kind === 'header') {
+          yield `${pretty ? '{\n  "header": ' : '{"header":'}${text},${pretty ? '\n  "entries": [' : '"entries":['}`;
+        } else if (kind === 'entry') {
+          yield `${entries++ === 0 ? '' : ','}${pretty ? '\n    ' : ''}${text}`;
+        } else {
+          yield `${close()},${pretty ? '\n  "summary": ' : '"summary":'}${text}`;
+        }
+      }
+      yield `${closed ? '' : close()}${pretty ? '\n}' : '}'}\n`;
+    },
+  };
+}
+
+/** The options of an export as the implementation sees them. */
+interface AnyOptions extends ToJsonlOptions {
+  readonly plugin?: DslPlugin<unknown, unknown> | undefined;
+  readonly options?: unknown;
+}
+
+/** Checks the arguments and returns the pieces of the export, produced lazily. */
+function produce(dict: ParsedDsl, options: AnyOptions, render: Render): AsyncIterable<Piece> {
+  if (
+    typeof dict !== 'object' ||
+    dict === null ||
+    typeof dict.entries !== 'function' ||
+    typeof dict.diagnosticCounts !== 'function'
+  ) {
+    throw dslError('invalidArgument', 'The dictionary must be a result of parseDsl.');
+  }
+  if (dict.bodyMode === 'raw') {
+    throw dslError(
+      'invalidArgument',
+      'A dictionary parsed with the body option "raw" cannot be exported: its bodies are not parsed.',
+    );
+  }
+  if (typeof options !== 'object' || options === null) {
+    throw dslError('invalidArgument', 'Options must be an object.');
+  }
+  const { plugin, summary = false } = options;
+  if (typeof summary !== 'boolean') {
+    throw dslError('invalidArgument', 'The summary option must be a boolean.');
+  }
+  if (plugin !== undefined) definePlugin(plugin);
+  return { [Symbol.asyncIterator]: () => pieces(dict, options, render) };
+}
+
+async function* pieces(
+  dict: ParsedDsl,
+  { plugin, options, summary = false }: AnyOptions,
+  render: Render,
+): AsyncGenerator<Piece> {
+  const header = await dict.header;
+  const info = await dict.info;
+  const record = createJsonlHeader({ header, info, ...(plugin === undefined ? {} : { plugin }) });
+  yield { kind: 'header', text: render(record, 1) as string };
+
+  let count = 0;
+  const entries: AsyncIterable<unknown> =
+    plugin === undefined
+      ? dict.entries()
+      : dict.entries({ plugin, options } as PluginUse<unknown, unknown>);
+  for await (const entry of entries) {
+    const data = plugin === undefined ? withoutCauses(entry as DslEntry) : entry;
+    count++;
+    yield { kind: 'entry', text: serialized(render, data, count) };
+  }
+
+  if (summary) {
+    const counts: DiagnosticCounts = dict.diagnosticCounts();
+    const record: JsonlSummaryRecord = {
+      type: 'summary',
+      entries: count,
+      diagnostics: counts.byCode,
+    };
+    yield { kind: 'summary', text: render(record, 1) as string };
+  }
+}
+
+/** The entry without the `cause` of its diagnostics: an error object, which is no JSON. */
+function withoutCauses(entry: DslEntry): DslEntry {
+  if (entry.diagnostics === undefined) return entry;
+  const diagnostics = entry.diagnostics.map(({ cause: _cause, ...rest }): Diagnostic => rest);
+  return { ...entry, diagnostics };
+}
+
+/** Renders the payload of an entry; what JSON cannot hold is an error naming the entry. */
+function serialized(render: Render, data: unknown, index: number): string {
+  let text: string | undefined;
+  try {
+    text = render(data, 2);
+  } catch (error) {
+    // BigInt, circular references and throwing `toJSON` methods.
+    throw dslError('notSerializable', `Entry ${index} cannot be serialized to JSON.`, error);
+  }
+  if (text === undefined) {
+    throw dslError('notSerializable', `The output for entry ${index} is not JSON.`);
+  }
+  return text;
+}

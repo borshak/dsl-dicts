@@ -1,0 +1,84 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!dist", "!coverage", "!node_modules", "!**/*.md", "!test/fixtures"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/**", "!src/node/**", "!src/cli.ts"],
+      "linter": {
+        "rules": {
+          "correctness": { "noNodejsModules": "error" },
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Buffer": "The core must run in browsers: use Uint8Array and TextDecoder.",
+                  "process": "The core must run in browsers: Node.js APIs belong in src/node.",
+                  "require": "The core is ESM only: use import.",
+                  "module": "The core is ESM only: use export.",
+                  "__dirname": "The core is ESM only: Node.js APIs belong in src/node.",
+                  "__filename": "The core is ESM only: Node.js APIs belong in src/node.",
+                  "global": "Use globalThis.",
+                  "setImmediate": "Not available in browsers: use queueMicrotask or setTimeout."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/plugins/**", "src/article/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../**", "!../index.js"],
+                    "message": "Built-in plugins use the public API only: import from the package entry point, '../index.js'."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "semicolons": "always"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/core.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["src/node", "src/cli.ts"]
+}

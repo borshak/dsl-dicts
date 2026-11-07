@@ -1,10 +1,52 @@
 {
   "name": "dsl-dicts",
-  "version": "1.0.4",
-  "description": "DSL Dictionaries support",
-  "main": "src/main.js",
+  "version": "2.0.0",
+  "description": "Streaming parser for ABBYY Lingvo DSL dictionaries (.dsl, .dsl.dz) for Node.js and browsers: a lossless AST, plugins, JSONL export and a CLI.",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
+    },
+    "./article": {
+      "types": "./dist/article/index.d.ts",
+      "default": "./dist/article/index.js"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "default": "./dist/plugins/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsl-dicts": "./dist/cli.js"
+  },
   "scripts": {
-    "test": "jest"
+    "build": "tsc -b",
+    "clean": "node -e \"for (const d of ['dist','node_modules/.cache/tsc']) require('node:fs').rmSync(d,{recursive:true,force:true})\"",
+    "typecheck": "tsc -p tsconfig.core.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run --project node",
+    "test:package": "node scripts/test-package.mjs",
+    "test:browser": "vitest run --project browser",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome ci .",
+    "format": "biome format --write .",
+    "check:package": "publint && attw --pack . --profile esm-only",
+    "ci": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:package && npm run check:package",
+    "docs": "vitest run --project node test/docs/sync.test.ts --update",
+    "prepublishOnly": "npm run clean && npm run ci"
   },
   "repository": {
     "type": "git",
@@ -12,7 +54,20 @@
   },
   "keywords": [
     "dsl",
-    "dictionary"
+    "lingvo",
+    "abbyy",
+    "abbyy-lingvo",
+    "goldendict",
+    "dictionary",
+    "dictionaries",
+    "dsl-dictionary",
+    "dictzip",
+    "parser",
+    "ast",
+    "jsonl",
+    "streaming",
+    "cli",
+    "typescript"
   ],
   "author": "Alexander Borshak",
   "license": "MIT",
@@ -21,6 +76,16 @@
   },
   "homepage": "https://github.com/borshak/dsl-dicts#readme",
   "devDependencies": {
-    "jest": "^23.6.0"
+    "@arethetypeswrong/cli": "0.18.5",
+    "@biomejs/biome": "2.6.6",
+    "@types/node": "22.20.5",
+    "@vitest/browser-playwright": "5.1.0",
+    "@vitest/coverage-v8": "5.1.0",
+    "fast-check": "4.10.2",
+    "playwright": "1.65.0",
+    "publint": "0.3.25",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
   }
 }
