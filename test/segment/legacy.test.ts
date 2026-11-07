@@ -1,10 +1,17 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { headwords, segmentAsync } from './helpers.js';
 
+// Bundler-level imports instead of node:fs, so the test also runs in a browser.
+const fixtures = import.meta.glob<string>('../fixtures/legacy/*.dsl', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
 function fixture(name: string): Uint8Array {
-  return readFileSync(fileURLToPath(new URL(`../fixtures/legacy/${name}`, import.meta.url)));
+  const text = fixtures[`../fixtures/legacy/${name}`];
+  if (text === undefined) throw new Error(`Missing fixture ${name}`);
+  return new TextEncoder().encode(text);
 }
 
 describe('legacy fixtures', () => {

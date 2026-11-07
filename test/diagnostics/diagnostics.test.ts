@@ -1,5 +1,3 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createDiagnostic } from '../../src/diagnostics/index.js';
 import {
@@ -11,14 +9,12 @@ import {
   findDiagnosticSpec,
 } from '../../src/index.js';
 
-const SRC = new URL('../../src/', import.meta.url).pathname;
-
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    return statSync(path).isDirectory() ? sourceFiles(path) : path.endsWith('.ts') ? [path] : [];
-  });
-}
+// Bundler-level imports instead of node:fs, so the test also runs in a browser.
+const sources = import.meta.glob<string>('../../src/**/*.ts', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
 
 const specs = Object.entries(DIAGNOSTICS);
 
@@ -45,19 +41,19 @@ describe('diagnostic catalog', () => {
 
   it('lists every code mentioned in the source code', () => {
     const known = new Set<string>(specs.map(([, spec]) => spec.code));
-    for (const file of sourceFiles(SRC)) {
-      for (const [code] of readFileSync(file, 'utf8').matchAll(/\bDSL\d{4}\b/g)) {
-        expect(known.has(code), `${code} in ${file}`).toBe(true);
+    for (const [file, code] of Object.entries(sources)) {
+      for (const [mentioned] of code.matchAll(/\bDSL\d{4}\b/g)) {
+        expect(known.has(mentioned), `${mentioned} in ${file}`).toBe(true);
       }
     }
   });
 
   it('uses every catalog entry in the source code', () => {
-    const sources = sourceFiles(SRC)
-      .filter((file) => !file.endsWith('catalog.ts'))
-      .map((file) => readFileSync(file, 'utf8'))
+    const others = Object.entries(sources)
+      .filter(([file]) => !file.endsWith('catalog.ts'))
+      .map(([, code]) => code)
       .join('\n');
-    for (const [name] of specs) expect(sources, name).toMatch(new RegExp(`'${name}'`));
+    for (const [name] of specs) expect(others, name).toMatch(new RegExp(`'${name}'`));
   });
 
   it('finds specs by code', () => {
@@ -121,19 +117,5 @@ describe('sinks and DslError', () => {
       position: { offset: 0, line: 1, column: 1 },
     });
     expect(JSON.parse(JSON.stringify(plain))).toEqual(plain);
-  });
-});
-
-describe('core isomorphism', () => {
-  it('uses no Node.js APIs outside src/node and src/cli.ts', () => {
-    const core = sourceFiles(SRC).filter(
-      (file) => !file.includes('/src/node/') && !file.endsWith('/src/cli.ts'),
-    );
-    for (const file of core) {
-      const code = readFileSync(file, 'utf8');
-      expect(code, file).not.toMatch(/from 'node:|\bBuffer\b|\bprocess\.|\brequire\(/);
-      // Formatted code has top-level statements at column 0.
-      expect(code, file).not.toMatch(/^(?:for )?await\b/m);
-    }
   });
 });

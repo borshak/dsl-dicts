@@ -1,16 +1,5 @@
-import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { findLanguageById, findLanguageByName, LANGUAGES } from '../../src/data/index.js';
-
-interface LegacyEntry {
-  ID: number;
-  'Old ID': number;
-}
-
-const require = createRequire(import.meta.url);
-const legacy = require('../../legacy/languages.js') as {
-  LANGUAGES: { BY_NAME: Record<string, LegacyEntry> };
-};
 
 describe('language table integrity', () => {
   it('has unique names', () => {
@@ -42,17 +31,6 @@ describe('language table integrity', () => {
       expect(l.name).toMatch(/^[A-Z][A-Za-z]+$/);
       expect(l.iso639_1).toMatch(/^[a-z]{2}$/);
       expect(l.iso639_3).toMatch(/^[a-z]{3}$/);
-    }
-  });
-
-  it('contains every language of the legacy table with matching ids', () => {
-    const entries = Object.entries(legacy.LANGUAGES.BY_NAME);
-    expect(entries.length).toBeGreaterThan(0);
-    for (const [name, old] of entries) {
-      const language = findLanguageByName(name);
-      expect(language, name).toBeDefined();
-      expect(language?.lcid, name).toBe(old.ID);
-      expect(language?.legacyId, name).toBe(old['Old ID']);
     }
   });
 

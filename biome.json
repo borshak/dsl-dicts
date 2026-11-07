@@ -28,6 +28,33 @@
       "preset": "recommended"
     }
   },
+  "overrides": [
+    {
+      "includes": ["src/**", "!src/node/**", "!src/cli.ts"],
+      "linter": {
+        "rules": {
+          "correctness": { "noNodejsModules": "error" },
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Buffer": "The core must run in browsers: use Uint8Array and TextDecoder.",
+                  "process": "The core must run in browsers: Node.js APIs belong in src/node.",
+                  "require": "The core is ESM only: use import.",
+                  "module": "The core is ESM only: use export.",
+                  "__dirname": "The core is ESM only: Node.js APIs belong in src/node.",
+                  "__filename": "The core is ESM only: Node.js APIs belong in src/node.",
+                  "global": "Use globalThis.",
+                  "setImmediate": "Not available in browsers: use queueMicrotask or setTimeout."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "javascript": {
     "formatter": {
       "quoteStyle": "single",
